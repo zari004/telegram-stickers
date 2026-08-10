@@ -3,7 +3,10 @@
 Telegram uchun stiker to'plami (sticker pack) yaratish vositalari. Uchta qism:
 
 1. **Interaktiv bot** (`bot/`) — foydalanuvchi rasm yoki matn yuboradi, bot uni
-   stikerga aylantirib, o'z Telegram stiker to'plamiga qo'shadi.
+   stikerga aylantirib, o'z Telegram stiker to'plamiga qo'shadi. Hammasi
+   tugmali menyu bilan boshqariladi; stil (rang/shrift) sozlash, kompaniya
+   logotipini fon qilib qo'yish va yaratilgan to'plamlarni ro'yxatlab
+   tahrirlash/o'chirish ham mumkin.
 2. **Matndan stiker generatori** (`scripts/generate_text_stickers.py`) — hech
    qanday bot kerak emas, matn qatorlaridan 512x512 PNG stiker rasmlarini
    yasab beradi.
@@ -28,18 +31,51 @@ dan olingan bot tokenini yozing (`/newbot` buyrug'i bilan yaratiladi).
 python -m bot.main
 ```
 
-Botga Telegramda yozing:
+Botni birinchi marta ochganlar uchun hammasi tugmali: `/start` bosilgach
+chiqadigan menyudan kerakli bo'limni tanlash kifoya, buyruqlarni yodlash
+shart emas.
 
-- `/start` — yordam va buyruqlar ro'yxati
-- `/newpack Mening to'plamim` — yangi to'plam boshlaydi
+**Asosiy menyu** (`/start`):
+- \U0001F195 **Yangi to'plam** — nom so'raladi, yozgach to'plam boshlanadi
+- \U0001F4E6 **Mening to'plamlarim** — avval yaratilgan to'plamlar ro'yxati
+- \U0001F3A8 **Stil sozlash** — matnli stikerlar ko'rinishini tugmalar bilan sozlash
+- \U0001F3E2 **Kompaniya logotipi** — logotipni yuklab, avtomatik fon qilib qo'shish
+- ❓ **Yordam**
+
+**To'plam yaratish**: menyudan \U0001F195 tugmasini bosib nom yozing (yoki
+`/newpack Nomi` buyrug'ini yuboring). Keyin:
 - Rasm yuboring — avtomatik stikerga aylantirib to'plamga qo'shadi
   (rasmga izoh sifatida bitta emoji yuborsangiz, o'shani ishlatadi, aks
   holda 🙂 qo'yiladi)
-- Oddiy matn yuboring — matndan stiker yasab to'plamga qo'shadi
+- Oddiy matn yuboring — matndan stiker yasab to'plamga qo'shadi (joriy
+  stil sozlamalari bilan)
 - `/addtext Salom! | 😀` — matndan stiker yasaydi, `|` dan keyin emoji
   ko'rsatish ixtiyoriy
 - `/done` — to'plamni yakunlaydi va `t.me/addstickers/...` havolasini beradi
 - `/cancel` — joriy to'plam yaratishni bekor qiladi
+
+**Stil sozlash** (`/style` yoki menyudagi \U0001F3A8 tugma): fon rangi, matn
+rangi, chiziq (outline) yoniq/o'chiq va shrift (qalin/oddiy) — barchasi
+tugmalar bilan tanlanadi, tanlov saqlanadi va shu foydalanuvchining barcha
+keyingi matnli stikerlarida qo'llanadi.
+
+**Kompaniya logotipi** (`/company` yoki menyudagi \U0001F3E2 tugma):
+logotipingizni bir marta rasm qilib yuboring — u saqlanadi va "Kompaniya
+rejimi" yoqilganda keyingi barcha stikerlarning (matnli va rasmli)
+orqa foniga avtomatik qo'yiladi. Matnli stikerlarda fon shaffof bo'lib
+qoladi (logotip aniq ko'rinishi uchun), rasmli stikerlarda esa rasm
+biroz kichraytirilib, atrofidan logotip "ramka" bo'lib ko'rinadi.
+Tugmalar orqali istalgan payt yoqib/o'chirib yoki logotipni
+almashtirib/o'chirib turish mumkin.
+
+**Mening to'plamlarim** (`/mypacks` yoki menyudagi \U0001F4E6 tugma): bot
+o'zi yaratgan barcha to'plamlaringizni ro'yxat qilib ko'rsatadi (Telegram
+API "mening barcha to'plamlarim" degan so'rovni qo'llab-quvvatlamaydi,
+shuning uchun bot buni o'zi eslab qoladi — quyidagi "Eslatmalar" bo'limiga
+qarang). Har bir to'plamni tanlab:
+- ➕ davom qo'shish (yopilgan to'plamga yana stiker qo'shish)
+- ✏️ nomini o'zgartirish
+- \U0001F5D1 butunlay o'chirish (Telegram'dagi to'plamning o'zi ham o'chadi)
 
 Har bir stiker to'plami avtomatik ravishda `<slug>_<user_id>_by_<bot_username>`
 nomi bilan yaratiladi — Telegramning nomlash talablariga mos keladi.
@@ -144,9 +180,13 @@ stickerpack/        - qayta ishlatiladigan yadro (bot va skriptlar ishlatadi)
   image_utils.py     - istalgan rasmni Telegram stiker o'lchamiga keltiradi
   text_sticker.py    - matndan sticker rasm chizadi (avtomatik shrift o'lchami)
   sticker_api.py     - Telegram Bot API bilan stiker to'plami yaratish/kengaytirish
+  compose.py         - stiker tarkibini fon (kompaniya logotipi) ustiga joylaydi
+  logo_store.py      - har bir foydalanuvchining kompaniya logotipini saqlaydi
+  pack_registry.py   - foydalanuvchi yaratgan to'plamlar ro'yxatini saqlaydi
   config.py          - .env / BOT_TOKEN o'qish
 bot/                 - interaktiv Telegram bot
   main.py, handlers.py, state.py
+data/                - ishga tushirilganda avtomatik yaratiladi (logotiplar, to'plamlar ro'yxati)
 scripts/
   upload_pack.py             - papkadagi rasmlarni to'plam qilib yuklash
   generate_text_stickers.py  - matndan stiker rasmlari generatsiya qilish
@@ -163,3 +203,11 @@ Procfile             - hosting xizmatlari uchun ishga tushirish buyrug'i
   stiker bo'lishi mumkin; bot bu chegarani nazorat qiladi.
 - Animatsion (TGS/WEBM) stikerlar bu loyihada qo'llab-quvvatlanmaydi —
   faqat statik PNG stikerlar bilan ishlaydi.
+- Stil sozlamalari, kompaniya logotipi va "Mening to'plamlarim" ro'yxati
+  `data/` papkasida (xotirada emas, diskda) saqlanadi. **Bepul Render
+  rejasida doimiy disk yo'q** — shuning uchun bot qayta ishga tushganda
+  (redeploy yoki uzoq vaqt uxlab, qayta uyg'ongandan keyin) bu ma'lumotlar
+  o'chib ketishi mumkin va foydalanuvchilar logotipni qayta yuklashga
+  to'g'ri kelishi mumkin. To'liq doimiy saqlash kerak bo'lsa, Render'da
+  pullik "Persistent Disk" ulash yoki tashqi bazaga (masalan Postgres)
+  o'tkazish kerak bo'ladi.
