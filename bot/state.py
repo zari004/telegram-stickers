@@ -42,6 +42,7 @@ class UserPrefs:
 
     style: TextStickerStyle = field(default_factory=TextStickerStyle)
     company_mode: bool = False
+    logo_outline_color: tuple[int, int, int, int] | None = None
     awaiting_logo: bool = False
     awaiting_new_pack_title: bool = False
     awaiting_rename_for: str | None = None

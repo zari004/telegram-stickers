@@ -17,7 +17,7 @@ from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
 from stickerpack import logo_store, pack_registry
-from stickerpack.compose import layer_over_background
+from stickerpack.compose import add_outline, layer_over_background
 from stickerpack.config import FONTS_DIR
 from stickerpack.image_utils import image_to_png_bytes, prepare_sticker_image
 from stickerpack.sticker_api import DEFAULT_EMOJI, add_or_create, build_set_name, pack_link
@@ -67,6 +67,12 @@ FONT_CHOICES = [
     ("Klassik", "DejaVuSerif-Bold.ttf"),
     ("Mashinka", "DejaVuSansMono-Bold.ttf"),
 ]
+LOGO_OUTLINE_STATES: list[tuple[str, tuple[int, int, int, int] | None]] = [
+    ("O'CHIQ", None),
+    ("Oq", (255, 255, 255, 255)),
+    ("Qora", (30, 30, 30, 255)),
+]
+LOGO_OUTLINE_WIDTH = 14
 
 COMPANY_PHOTO_SCALE = 0.82  # shrink uploaded photos so the logo frames them
 
@@ -324,24 +330,50 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # --------------------------------------------------------------------------
 
 
-def _company_text(user_id: int, company_mode: bool) -> str:
+def _outline_label(color: tuple[int, int, int, int] | None) -> str:
+    for name, value in LOGO_OUTLINE_STATES:
+        if value == color:
+            return name
+    return LOGO_OUTLINE_STATES[0][0]
+
+
+def _next_outline_color(color: tuple[int, int, int, int] | None) -> tuple[int, int, int, int] | None:
+    values = [value for _, value in LOGO_OUTLINE_STATES]
+    next_index = (values.index(color) + 1) % len(values) if color in values else 1
+    return values[next_index]
+
+
+def _company_text(user_id: int, company_mode: bool, outline_color: tuple[int, int, int, int] | None) -> str:
     has_logo = logo_store.has_logo(user_id)
     logo_line = "Logotip: ✅ yuklangan\n" if has_logo else "Logotip: ❌ hali yuklanmagan\n"
-    mode_line = "Rejim: \U0001F7E2 YONIQ" if company_mode else "Rejim: ⚪ O'CHIQ"
+    mode_line = "Rejim: \U0001F7E2 YONIQ\n" if company_mode else "Rejim: ⚪ O'CHIQ\n"
+    outline_line = f"Logotip konturi: {_outline_label(outline_color)}"
     return (
         "\U0001F3E2 Kompaniya rejimi\n\n"
         + logo_line
         + mode_line
+        + outline_line
         + "\n\nYoqilgan bo'lsa, logotipingiz yangi matnli va rasmli stikerlarning "
-        "orqa foniga avtomatik qo'yiladi."
+        "orqa foniga avtomatik qo'yiladi. Logotipni PNG fayl (hujjat) sifatida "
+        "yuborsangiz, shaffof fon saqlanib qoladi va kontur uning shakliga mos chiqadi."
     )
 
 
-def _company_keyboard(has_logo: bool, company_mode: bool) -> InlineKeyboardMarkup:
+def _company_keyboard(
+    has_logo: bool, company_mode: bool, outline_color: tuple[int, int, int, int] | None
+) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton("\U0001F4E4 Logotip yuklash/almashtirish", callback_data="company:setlogo")]]
     if has_logo:
         toggle_label = "⚪ Rejimni o'chirish" if company_mode else "\U0001F7E2 Rejimni yoqish"
         rows.append([InlineKeyboardButton(toggle_label, callback_data="company:toggle")])
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    f"\U0001F58A Logotip konturi: {_outline_label(outline_color)}",
+                    callback_data="company:outline",
+                )
+            ]
+        )
         rows.append([InlineKeyboardButton("\U0001F5D1 Logotipni o'chirish", callback_data="company:delete")])
     rows.append([InlineKeyboardButton("\U0001F3E0 Bosh menyu", callback_data="menu:help")])
     return InlineKeyboardMarkup(rows)
@@ -351,8 +383,8 @@ async def _render_company(user_id: int, send) -> None:
     user_prefs = prefs.get(user_id)
     has_logo = logo_store.has_logo(user_id)
     await send(
-        _company_text(user_id, user_prefs.company_mode),
-        reply_markup=_company_keyboard(has_logo, user_prefs.company_mode),
+        _company_text(user_id, user_prefs.company_mode, user_prefs.logo_outline_color),
+        reply_markup=_company_keyboard(has_logo, user_prefs.company_mode, user_prefs.logo_outline_color),
     )
 
 
@@ -369,22 +401,34 @@ async def company_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if action == "setlogo":
         user_prefs.awaiting_logo = True
         await query.answer()
-        await query.edit_message_text("\U0001F4E4 Endi menga kompaniya logotipini rasm qilib yuboring.")
+        await query.edit_message_text(
+            "\U0001F4E4 Endi menga kompaniya logotipini yuboring.\n\n"
+            "Eng yaxshi natija uchun uni \U0001F4CE **fayl (hujjat)** sifatida, PNG "
+            "formatida yuboring - shunda shaffof fon saqlanib qoladi. Oddiy rasm "
+            "qilib yuborsangiz ham bo'ladi, lekin Telegram uni siqib, fonini "
+            "oq/qattiq qilib qo'yishi mumkin."
+        )
         return
     if action == "toggle":
         if not logo_store.has_logo(user.id):
             await query.answer("Avval logotip yuklang.", show_alert=True)
             return
         user_prefs.company_mode = not user_prefs.company_mode
+    elif action == "outline":
+        if not logo_store.has_logo(user.id):
+            await query.answer("Avval logotip yuklang.", show_alert=True)
+            return
+        user_prefs.logo_outline_color = _next_outline_color(user_prefs.logo_outline_color)
     elif action == "delete":
         logo_store.delete_logo(user.id)
         user_prefs.company_mode = False
+        user_prefs.logo_outline_color = None
 
     await query.answer()
     has_logo = logo_store.has_logo(user.id)
     await query.edit_message_text(
-        _company_text(user.id, user_prefs.company_mode),
-        reply_markup=_company_keyboard(has_logo, user_prefs.company_mode),
+        _company_text(user.id, user_prefs.company_mode, user_prefs.logo_outline_color),
+        reply_markup=_company_keyboard(has_logo, user_prefs.company_mode, user_prefs.logo_outline_color),
     )
 
 
@@ -395,6 +439,8 @@ def _apply_company_overlay(user_id: int, image: Image.Image, *, is_photo: bool) 
     logo = logo_store.load_logo(user_id)
     if logo is None:
         return image
+    if user_prefs.logo_outline_color:
+        logo = add_outline(logo, color=user_prefs.logo_outline_color, width=LOGO_OUTLINE_WIDTH)
     scale = COMPANY_PHOTO_SCALE if is_photo else 1.0
     return layer_over_background(image, logo, foreground_scale=scale)
 
@@ -506,24 +552,38 @@ async def pack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 # --------------------------------------------------------------------------
-# Photo -> sticker
+# Photo / file -> sticker
 # --------------------------------------------------------------------------
 
 
+async def _download_image_bytes(update: Update) -> bytes:
+    message = update.message
+    telegram_file = message.photo[-1] if message.photo else message.document
+    tg_file = await telegram_file.get_file()
+    return bytes(await tg_file.download_as_bytearray())
+
+
 async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _handle_incoming_image(update, context)
+
+
+async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _handle_incoming_image(update, context)
+
+
+async def _handle_incoming_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     user_prefs = prefs.get(user.id)
+    image_bytes = await _download_image_bytes(update)
 
     if user_prefs.awaiting_logo:
-        photo = update.message.photo[-1]
-        tg_file = await photo.get_file()
-        image_bytes = bytes(await tg_file.download_as_bytearray())
         logo_store.save_logo(user.id, Image.open(BytesIO(image_bytes)))
         user_prefs.awaiting_logo = False
         user_prefs.company_mode = True
         await update.message.reply_text(
             "✅ Logotip saqlandi va kompaniya rejimi yoqildi. Endi yuboradigan barcha "
-            "stikerlar shu logotip foniga qo'yiladi. /company orqali o'chirish yoki o'zgartirish mumkin."
+            "stikerlar shu logotip foniga qo'yiladi. /company orqali o'chirish, "
+            "almashtirish yoki kontur qo'shish mumkin."
         )
         return
 
@@ -539,10 +599,6 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "chegarasi). /done bilan yakunlang va yangi to'plam boshlang."
         )
         return
-
-    photo = update.message.photo[-1]
-    tg_file = await photo.get_file()
-    image_bytes = bytes(await tg_file.download_as_bytearray())
 
     emoji = extract_emoji(update.message.caption) or DEFAULT_EMOJI
 

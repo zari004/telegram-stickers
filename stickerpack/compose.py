@@ -1,7 +1,7 @@
 """Layer a sticker's content on top of a background image (e.g. a company logo)."""
 from __future__ import annotations
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 from .image_utils import STICKER_SIZE
 
@@ -43,3 +43,29 @@ def layer_over_background(
     offset = ((canvas.width - fg.width) // 2, (canvas.height - fg.height) // 2)
     canvas.paste(fg, offset, fg)
     return canvas
+
+
+def add_outline(
+    image: Image.Image,
+    color: tuple[int, int, int, int] = (255, 255, 255, 255),
+    width: int = 10,
+) -> Image.Image:
+    """Draw a solid-color stroke around the opaque silhouette of ``image``.
+
+    Works by dilating the alpha channel (a max-filter over a ``width``-sized
+    window) into a solid ``color`` layer, then drawing the original image on
+    top. A fully-opaque rectangular photo just gets a plain border; a PNG
+    logo with real transparency gets a stroke that traces its shape.
+    """
+    image = image.convert("RGBA")
+    alpha = image.split()[-1]
+    kernel_size = max(1, width) * 2 + 1
+    dilated_alpha = alpha.filter(ImageFilter.MaxFilter(kernel_size))
+
+    stroke_layer = Image.new("RGBA", image.size, color[:3] + (0,))
+    stroke_layer.putalpha(dilated_alpha)
+
+    result = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    result.alpha_composite(stroke_layer)
+    result.alpha_composite(image)
+    return result
