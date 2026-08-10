@@ -18,7 +18,7 @@ from telegram.ext import ContextTypes
 
 from stickerpack import logo_store, pack_registry
 from stickerpack.compose import layer_over_background
-from stickerpack.config import DEFAULT_FONT_REGULAR
+from stickerpack.config import FONTS_DIR
 from stickerpack.image_utils import image_to_png_bytes, prepare_sticker_image
 from stickerpack.sticker_api import DEFAULT_EMOJI, add_or_create, build_set_name, pack_link
 from stickerpack.text_sticker import TextStickerStyle, render_text_sticker
@@ -61,6 +61,12 @@ TEXT_COLOR_CHOICES = [
     ("Qizil", "EB5757"),
     ("Ko'k", "2D9CDB"),
 ]
+FONT_CHOICES = [
+    ("Qalin", "DejaVuSans-Bold.ttf"),
+    ("Oddiy", "DejaVuSans.ttf"),
+    ("Klassik", "DejaVuSerif-Bold.ttf"),
+    ("Mashinka", "DejaVuSansMono-Bold.ttf"),
+]
 
 COMPANY_PHOTO_SCALE = 0.82  # shrink uploaded photos so the logo frames them
 
@@ -70,6 +76,18 @@ def extract_emoji(text: str | None) -> str | None:
         return None
     match = EMOJI_RE.search(text)
     return match.group(0)[:1] if match else None
+
+
+def _font_path(filename: str) -> str:
+    return str(FONTS_DIR / filename)
+
+
+def _font_name(font_path: str | None) -> str:
+    resolved = font_path or _font_path(FONT_CHOICES[0][1])
+    for name, filename in FONT_CHOICES:
+        if _font_path(filename) == resolved:
+            return name
+    return FONT_CHOICES[0][0]
 
 
 def _chunk(items: list, size: int) -> list[list]:
@@ -207,14 +225,13 @@ def _color_name(choices: list[tuple[str, str | None]], color: tuple | None) -> s
 
 
 def _style_summary(style: TextStickerStyle) -> str:
-    font_label = "Oddiy" if style.font_path == str(DEFAULT_FONT_REGULAR) else "Qalin"
     outline_label = "yoniq" if style.outline_color else "o'chiq"
     return (
         "\U0001F3A8 Matnli stiker stili:\n"
         f"Fon: {_color_name(BG_CHOICES, style.background_color)}\n"
         f"Matn rangi: {_color_name(TEXT_COLOR_CHOICES, style.text_color)}\n"
         f"Chiziq: {outline_label}\n"
-        f"Shrift: {font_label}\n\n"
+        f"Shrift: {_font_name(style.font_path)}\n\n"
         "Tugmalar orqali o'zgartiring:"
     )
 
@@ -237,17 +254,23 @@ def _style_keyboard(style: TextStickerStyle) -> InlineKeyboardMarkup:
         )
         for name, hex_v in TEXT_COLOR_CHOICES
     ]
+    current_font = style.font_path or _font_path(FONT_CHOICES[0][1])
+    font_buttons = [
+        InlineKeyboardButton(
+            mark(name, _font_path(filename) == current_font),
+            callback_data=f"style:font:{filename}",
+        )
+        for name, filename in FONT_CHOICES
+    ]
     outline_label = "\U0001F532 Chiziq: YONIQ" if style.outline_color else "⬜ Chiziq: O'CHIQ"
-    is_regular = style.font_path == str(DEFAULT_FONT_REGULAR)
-    font_label = "\U0001F520 Shrift: Oddiy" if is_regular else "\U0001F520 Shrift: Qalin"
 
     rows = [
         *_chunk(bg_buttons, 4),
         [InlineKeyboardButton("\U0001F3A8 Boshqa fon rangi (HEX)", callback_data="style:custompick:bg")],
         *_chunk(text_buttons, 3),
         [InlineKeyboardButton("\U0001F3A8 Boshqa matn rangi (HEX)", callback_data="style:custompick:text")],
+        *_chunk(font_buttons, 2),
         [InlineKeyboardButton(outline_label, callback_data="style:outline:toggle")],
-        [InlineKeyboardButton(font_label, callback_data="style:font:toggle")],
         [InlineKeyboardButton("✅ Saqlash", callback_data="style:close")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -288,8 +311,7 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif kind == "outline":
         user_prefs.style.outline_color = None if user_prefs.style.outline_color else (255, 255, 255, 255)
     elif kind == "font":
-        is_regular = user_prefs.style.font_path == str(DEFAULT_FONT_REGULAR)
-        user_prefs.style.font_path = None if is_regular else str(DEFAULT_FONT_REGULAR)
+        user_prefs.style.font_path = _font_path(value)
 
     await query.answer()
     await query.edit_message_text(_style_summary(user_prefs.style), reply_markup=_style_keyboard(user_prefs.style))
