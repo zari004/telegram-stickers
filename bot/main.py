@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
+from telegram.request import HTTPXRequest
 
 from stickerpack.config import require_bot_token
 
@@ -18,7 +19,17 @@ logging.basicConfig(
 
 def build_application() -> Application:
     token = require_bot_token()
-    application = Application.builder().token(token).build()
+    # Default timeouts (5s) are too tight for sticker-set calls (they upload
+    # an image) on a CPU-constrained free-tier host, causing spurious
+    # TimedOut errors under normal use - give them more room.
+    request = HTTPXRequest(
+        connect_timeout=15.0,
+        read_timeout=30.0,
+        write_timeout=30.0,
+        pool_timeout=10.0,
+        media_write_timeout=45.0,
+    )
+    application = Application.builder().token(token).request(request).build()
 
     application.add_handler(CommandHandler("start", handlers.start_command))
     application.add_handler(CommandHandler("help", handlers.help_command))
