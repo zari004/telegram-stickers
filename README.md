@@ -94,41 +94,48 @@ mavjud bo'lsa davomiga stiker qo'shib boradi — shuning uchun uni bir necha
 marta, turli papkalar bilan qayta ishga tushirib, bitta to'plamni
 kengaytirish ham mumkin.
 
-## Botni doimiy ishlashi uchun serverga joylashtirish (Railway)
+## Botni doimiy ishlashi uchun serverga joylashtirish (bepul: Render)
 
 Botni uzluksiz ishlatish uchun uni doimiy ishlaydigan serverga qo'yish kerak
-(shaxsiy kompyuter yopilsa, bot ham to'xtaydi). Railway.app bepul sinov
-krediti bilan buni eng oson qiladi:
+(shaxsiy kompyuter yopilsa, bot ham to'xtaydi). [Render.com](https://render.com)
+kredit karta talab qilmasdan bepul "Web Service" beradi — shundan
+foydalanamiz. (Railway ham bor, lekin uning bepul sinov muddati tez tugaydi
+va keyin to'lov so'raydi.)
 
-1. **GitHub'ga kirish**: [railway.app](https://railway.app) saytiga o'ting
-   va "Login with GitHub" tugmasi orqali ro'yxatdan o'ting.
-2. **Yangi loyiha yarating**: Dashboard'da **New Project** →
-   **Deploy from GitHub repo** ni tanlang, so'ng ro'yxatdan
-   `zari004/telegram-stickers` repositoriyasini tanlang (agar ko'rinmasa,
-   "Configure GitHub App" orqali ruxsat bering).
-3. **Branch'ni tekshiring**: Railway odatda `main` branch'ni oladi — bu
-   to'g'ri, chunki barcha kod shu yerda.
-4. **Muhit o'zgaruvchisini qo'shing**: yaratilgan servisga kiring →
-   **Variables** bo'limi → **New Variable** → nomi `BOT_TOKEN`, qiymati esa
-   @BotFather'dan olgan tokeningiz. Saqlang.
-5. **Ishga tushirish buyrug'ini tekshiring**: Railway repo ildizidagi
-   `Procfile` faylini (`worker: python -m bot.main`) avtomatik aniqlaydi va
-   shu buyruq bilan botni fon jarayoni (worker) sifatida ishga tushiradi.
-   Agar avtomatik aniqlamasa, servis sozlamalarida **Settings → Deploy →
-   Custom Start Command** ga qo'lda `python -m bot.main` deb yozing.
-6. **Deploy bo'lishini kuting**: **Deployments** bo'limida jarayonni
-   kuzating. Tugagach **View Logs** ni oching — xatosiz ishga tushgan
-   bo'lsa, log oqimida xatolik ko'rinmaydi (bot `run_polling` rejimida
-   kutib turadi, alohida "started" xabari chiqmasligi mumkin — bu normal).
-7. **Sinab ko'ring**: Telegramda botingizga o'ting, `/start` yozing —
-   javob kelsa, bot ishga tushgan va doimiy ishlab turibdi.
-8. **Yangilash**: keyinchalik kodga o'zgartirish kiritib GitHub'dagi `main`
-   branch'iga push qilsangiz, Railway avtomatik qayta deploy qiladi.
+Bot Render'ning "internetga ochiq port" talabiga javob berishi uchun
+`bot/healthcheck.py` orqali kichik yordamchi server ham qo'shilgan — u
+faqat Render kabi muhitda (PORT o'zgaruvchisi bo'lganda) ishga tushadi,
+kompyuteringizda oddiy ishga tushirganingizda hech narsani o'zgartirmaydi.
 
-> Eslatma: Railway'ning bepul rejasi oylik kredit chegarasiga ega (odatda
-> kichik botlar uchun yetarli). Agar kredit tugasa, to'lov usulini
-> ulashingiz yoki Render/Fly.io kabi boshqa xizmatga o'tishingiz mumkin —
-> ular ham xuddi shu `Procfile` va `BOT_TOKEN` o'zgaruvchisi bilan ishlaydi.
+1. **GitHub'ga kirish**: [render.com](https://render.com) saytiga o'ting va
+   "Get Started" → "GitHub" orqali ro'yxatdan o'ting.
+2. **Yangi servis yarating**: Dashboard'da **New +** → **Web Service** ni
+   tanlang.
+3. **Repo'ni ulang**: ro'yxatdan `zari004/telegram-stickers` ni tanlang
+   (ko'rinmasa, "Configure account" orqali Render'ga repo'ga ruxsat
+   bering). Branch — `main`.
+4. **Sozlamalarni kiriting**:
+   - **Name**: xohlagan nom (masalan `telegram-stickers-bot`)
+   - **Runtime**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `python -m bot.main`
+   - **Instance Type**: `Free`
+5. **Muhit o'zgaruvchisini qo'shing**: pastroqda **Environment Variables**
+   bo'limida **Add Environment Variable** → nomi `BOT_TOKEN`, qiymati esa
+   @BotFather'dan olgan tokeningiz.
+6. **Create Web Service** tugmasini bosing va deploy tugashini kuting
+   (bir necha daqiqa). **Logs** bo'limida xatolik yo'qligini tekshiring.
+7. **Sinab ko'ring**: Telegramda botingizga `/start` yozing — javob kelsa,
+   ishlayapti.
+8. **Doim uyg'oq turishi uchun (muhim)**: Render'ning bepul rejasi 15
+   daqiqa davomida hech qanday so'rov kelmasa, servisni "uxlatib qo'yadi".
+   Buni oldini olish uchun bepul [cron-job.org](https://cron-job.org) yoki
+   [UptimeRobot](https://uptimerobot.com) saytida hisob oching va Render
+   bergan servis havolangizni (masalan `https://telegram-stickers-bot.onrender.com`)
+   har 10 daqiqada bir marta "ping" qilib turishni sozlang. Shunda bot
+   doim ishlab turadi.
+9. **Yangilash**: keyinchalik kodni GitHub'dagi `main` branch'iga push
+   qilsangiz, Render avtomatik qayta deploy qiladi.
 
 ## Loyihaning tuzilishi
 

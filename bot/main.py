@@ -8,6 +8,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from stickerpack.config import require_bot_token
 
 from . import handlers
+from .healthcheck import start_healthcheck_server_if_needed
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -34,6 +35,7 @@ def build_application() -> Application:
 
 
 def main() -> None:
+    start_healthcheck_server_if_needed()
     application = build_application()
     application.run_polling(allowed_updates=["message"])
 
