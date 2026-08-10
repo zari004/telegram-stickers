@@ -285,7 +285,9 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     query = update.callback_query
     user = query.from_user
     user_prefs = prefs.get(user.id)
-    _, kind, value = query.data.split(":", 2)
+    parts = query.data.split(":", 2)
+    kind = parts[1]
+    value = parts[2] if len(parts) > 2 else None
 
     if kind == "close":
         await query.answer("Saqlandi ✅")
