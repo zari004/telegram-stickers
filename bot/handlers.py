@@ -83,6 +83,14 @@ def _hex_to_rgba(hex_value: str | None) -> tuple[int, int, int, int] | None:
     return (r, g, b, 255)
 
 
+HEX_INPUT_RE = re.compile(r"^#?([0-9a-fA-F]{6})$")
+
+
+def _parse_hex_input(text: str) -> tuple[int, int, int, int] | None:
+    match = HEX_INPUT_RE.match(text.strip())
+    return _hex_to_rgba(match.group(1)) if match else None
+
+
 # --------------------------------------------------------------------------
 # Main menu
 # --------------------------------------------------------------------------
@@ -235,7 +243,9 @@ def _style_keyboard(style: TextStickerStyle) -> InlineKeyboardMarkup:
 
     rows = [
         *_chunk(bg_buttons, 4),
+        [InlineKeyboardButton("\U0001F3A8 Boshqa fon rangi (HEX)", callback_data="style:custompick:bg")],
         *_chunk(text_buttons, 3),
+        [InlineKeyboardButton("\U0001F3A8 Boshqa matn rangi (HEX)", callback_data="style:custompick:text")],
         [InlineKeyboardButton(outline_label, callback_data="style:outline:toggle")],
         [InlineKeyboardButton(font_label, callback_data="style:font:toggle")],
         [InlineKeyboardButton("✅ Saqlash", callback_data="style:close")],
@@ -259,6 +269,15 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.edit_message_text(
             "Stil saqlandi. Endi yangi matnli stikerlar shu uslubda chiqadi.",
             reply_markup=_back_to_menu_button(),
+        )
+        return
+
+    if kind == "custompick":
+        user_prefs.awaiting_custom_color = value  # "bg" or "text"
+        target = "fon" if value == "bg" else "matn"
+        await query.answer()
+        await query.edit_message_text(
+            f"\U0001F3A8 {target.capitalize()} rangi uchun HEX kod yuboring, masalan: #FF5733"
         )
         return
 
@@ -562,6 +581,25 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"✅ '{text}' to'plami boshlandi.\n"
             "Endi menga rasm yuboring yoki matn yozing - har biri to'plamga stiker "
             "sifatida qo'shiladi. Tugatgach /done ni bosing."
+        )
+        return
+
+    if user_prefs.awaiting_custom_color:
+        target = user_prefs.awaiting_custom_color  # "bg" or "text"
+        color = _parse_hex_input(text)
+        if color is None:
+            await update.message.reply_text(
+                "Bu HEX kod emas. Masalan: #FF5733 yoki FF5733 shaklida yuboring, "
+                "yoki qayta urinmaslik uchun /style ni qayta oching."
+            )
+            return
+        user_prefs.awaiting_custom_color = None
+        if target == "bg":
+            user_prefs.style.background_color = color
+        else:
+            user_prefs.style.text_color = color
+        await update.message.reply_text(
+            _style_summary(user_prefs.style), reply_markup=_style_keyboard(user_prefs.style)
         )
         return
 
