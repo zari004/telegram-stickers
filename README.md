@@ -94,6 +94,42 @@ mavjud bo'lsa davomiga stiker qo'shib boradi — shuning uchun uni bir necha
 marta, turli papkalar bilan qayta ishga tushirib, bitta to'plamni
 kengaytirish ham mumkin.
 
+## Botni doimiy ishlashi uchun serverga joylashtirish (Railway)
+
+Botni uzluksiz ishlatish uchun uni doimiy ishlaydigan serverga qo'yish kerak
+(shaxsiy kompyuter yopilsa, bot ham to'xtaydi). Railway.app bepul sinov
+krediti bilan buni eng oson qiladi:
+
+1. **GitHub'ga kirish**: [railway.app](https://railway.app) saytiga o'ting
+   va "Login with GitHub" tugmasi orqali ro'yxatdan o'ting.
+2. **Yangi loyiha yarating**: Dashboard'da **New Project** →
+   **Deploy from GitHub repo** ni tanlang, so'ng ro'yxatdan
+   `zari004/telegram-stickers` repositoriyasini tanlang (agar ko'rinmasa,
+   "Configure GitHub App" orqali ruxsat bering).
+3. **Branch'ni tekshiring**: Railway odatda `main` branch'ni oladi — bu
+   to'g'ri, chunki barcha kod shu yerda.
+4. **Muhit o'zgaruvchisini qo'shing**: yaratilgan servisga kiring →
+   **Variables** bo'limi → **New Variable** → nomi `BOT_TOKEN`, qiymati esa
+   @BotFather'dan olgan tokeningiz. Saqlang.
+5. **Ishga tushirish buyrug'ini tekshiring**: Railway repo ildizidagi
+   `Procfile` faylini (`worker: python -m bot.main`) avtomatik aniqlaydi va
+   shu buyruq bilan botni fon jarayoni (worker) sifatida ishga tushiradi.
+   Agar avtomatik aniqlamasa, servis sozlamalarida **Settings → Deploy →
+   Custom Start Command** ga qo'lda `python -m bot.main` deb yozing.
+6. **Deploy bo'lishini kuting**: **Deployments** bo'limida jarayonni
+   kuzating. Tugagach **View Logs** ni oching — xatosiz ishga tushgan
+   bo'lsa, log oqimida xatolik ko'rinmaydi (bot `run_polling` rejimida
+   kutib turadi, alohida "started" xabari chiqmasligi mumkin — bu normal).
+7. **Sinab ko'ring**: Telegramda botingizga o'ting, `/start` yozing —
+   javob kelsa, bot ishga tushgan va doimiy ishlab turibdi.
+8. **Yangilash**: keyinchalik kodga o'zgartirish kiritib GitHub'dagi `main`
+   branch'iga push qilsangiz, Railway avtomatik qayta deploy qiladi.
+
+> Eslatma: Railway'ning bepul rejasi oylik kredit chegarasiga ega (odatda
+> kichik botlar uchun yetarli). Agar kredit tugasa, to'lov usulini
+> ulashingiz yoki Render/Fly.io kabi boshqa xizmatga o'tishingiz mumkin —
+> ular ham xuddi shu `Procfile` va `BOT_TOKEN` o'zgaruvchisi bilan ishlaydi.
+
 ## Loyihaning tuzilishi
 
 ```
@@ -108,6 +144,7 @@ scripts/
   upload_pack.py             - papkadagi rasmlarni to'plam qilib yuklash
   generate_text_stickers.py  - matndan stiker rasmlari generatsiya qilish
 assets/fonts/        - matnli stikerlar uchun shrift (DejaVu Sans)
+Procfile             - hosting xizmatlari uchun ishga tushirish buyrug'i
 ```
 
 ## Eslatmalar
