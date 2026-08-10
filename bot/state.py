@@ -1,7 +1,9 @@
-"""Tiny in-memory session store: one active pack-being-built per user."""
+"""In-memory per-user bot state: the pack currently being built, and prefs."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
+from stickerpack.text_sticker import TextStickerStyle
 
 MAX_STICKERS_PER_PACK = 120
 
@@ -34,4 +36,24 @@ class SessionStore:
             session.count += 1
 
 
+@dataclass
+class UserPrefs:
+    """Sticky per-user settings and short-lived "waiting for a reply" flags."""
+
+    style: TextStickerStyle = field(default_factory=TextStickerStyle)
+    company_mode: bool = False
+    awaiting_logo: bool = False
+    awaiting_new_pack_title: bool = False
+    awaiting_rename_for: str | None = None
+
+
+class PrefsStore:
+    def __init__(self) -> None:
+        self._prefs: dict[int, UserPrefs] = {}
+
+    def get(self, user_id: int) -> UserPrefs:
+        return self._prefs.setdefault(user_id, UserPrefs())
+
+
 sessions = SessionStore()
+prefs = PrefsStore()
