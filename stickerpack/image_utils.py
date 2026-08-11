@@ -9,7 +9,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 STICKER_SIZE = 512
 
@@ -48,7 +48,13 @@ def prepare_sticker_png_bytes(source: "str | Path | bytes | Image.Image") -> byt
 
 def load_image(source: "str | Path | bytes | Image.Image") -> Image.Image:
     if isinstance(source, Image.Image):
-        return source
-    if isinstance(source, (bytes, bytearray)):
-        return Image.open(BytesIO(source))
-    return Image.open(source)
+        image = source
+    elif isinstance(source, (bytes, bytearray)):
+        image = Image.open(BytesIO(source))
+    else:
+        image = Image.open(source)
+
+    # Phone photos are often stored "sideways" with an EXIF Orientation tag
+    # telling viewers how to rotate them for display. PIL ignores that tag
+    # by default, so without this a portrait photo comes out landscape.
+    return ImageOps.exif_transpose(image)
