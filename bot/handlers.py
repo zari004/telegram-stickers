@@ -79,9 +79,9 @@ COMPANY_PHOTO_SCALE = 0.82  # shrink uploaded photos so the logo frames them
 
 # (label, width, height, dpi_or_None) - dpi=None leaves the user's current DPI untouched
 RESIZE_PRESETS: list[tuple[str, int, int, int | None]] = [
+    ("Infografika (1080x1440, 300 dpi)", 1080, 1440, 300),
     ("Instagram post (1080x1080)", 1080, 1080, None),
     ("Instagram Story (1080x1920)", 1080, 1920, None),
-    ("HD ekran (1920x1080)", 1920, 1080, None),
     ("A4 chop etish (2480x3508, 300 dpi)", 2480, 3508, 300),
 ]
 
