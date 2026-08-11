@@ -11,6 +11,7 @@ import re
 from dataclasses import replace
 from functools import partial
 from io import BytesIO
+from pathlib import Path
 
 from PIL import Image
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -564,10 +565,12 @@ async def _resize_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE, i
         await update.message.reply_text("Rasmni qayta ishlashda xatolik yuz berdi, qayta urinib ko'ring.")
         return
 
+    document = update.message.document
+    stem = Path(document.file_name).stem if document and document.file_name else "rasm"
+
     await update.message.reply_document(
         document=BytesIO(png_bytes),
-        filename=f"resized_{width}x{height}.png",
-        caption=f"\U0001F4D0 {width}x{height} px, {dpi} dpi",
+        filename=f"{stem}.png",
     )
 
 
