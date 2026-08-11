@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import replace
+from functools import partial
 from io import BytesIO
 
 from PIL import Image
@@ -124,6 +125,24 @@ def _parse_hex_input(text: str) -> tuple[int, int, int, int] | None:
     return _hex_to_rgba(match.group(1)) if match else None
 
 
+async def _safe_edit_message_text(query, text: str, reply_markup: InlineKeyboardMarkup | None = None) -> None:
+    """Like ``query.edit_message_text``, but swallows Telegram's "message is
+    not modified" error.
+
+    That error fires whenever a button is tapped but the resulting text +
+    keyboard are byte-identical to what's already shown (e.g. re-selecting
+    an option that's already active). Without this, the tap silently does
+    nothing from the user's perspective - the loading spinner clears (since
+    ``query.answer()`` already ran) but the crash prevents any visible
+    change or feedback.
+    """
+    try:
+        await query.edit_message_text(text, reply_markup=reply_markup)
+    except BadRequest as exc:
+        if "Message is not modified" not in str(exc):
+            raise
+
+
 # --------------------------------------------------------------------------
 # Main menu
 # --------------------------------------------------------------------------
@@ -166,23 +185,23 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         user_prefs = prefs.get(user.id)
         user_prefs.resize_mode = False
         user_prefs.awaiting_new_pack_title = True
-        await query.edit_message_text(
+        await _safe_edit_message_text(query,
             "\U0001F195 Yangi to'plam uchun nom yozing (masalan: Mening kulgichlarim)."
         )
     elif action == "mypacks":
-        await _render_mypacks(user.id, query.edit_message_text)
+        await _render_mypacks(user.id, partial(_safe_edit_message_text, query))
     elif action == "style":
         style = prefs.get(user.id).style
-        await query.edit_message_text(_style_summary(style), reply_markup=_style_keyboard(style))
+        await _safe_edit_message_text(query, _style_summary(style), reply_markup=_style_keyboard(style))
     elif action == "company":
-        await _render_company(user.id, query.edit_message_text)
+        await _render_company(user.id, partial(_safe_edit_message_text, query))
     elif action == "resize":
         user_prefs = prefs.get(user.id)
         user_prefs.resize_mode = True
-        await query.edit_message_text(_resize_text(user_prefs), reply_markup=_resize_keyboard())
+        await _safe_edit_message_text(query, _resize_text(user_prefs), reply_markup=_resize_keyboard())
     elif action == "help":
         prefs.get(user.id).resize_mode = False
-        await query.edit_message_text(WELCOME_TEXT, reply_markup=_main_menu_keyboard())
+        await _safe_edit_message_text(query, WELCOME_TEXT, reply_markup=_main_menu_keyboard())
 
 
 # --------------------------------------------------------------------------
@@ -317,7 +336,7 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if kind == "close":
         await query.answer("Saqlandi ✅")
-        await query.edit_message_text(
+        await _safe_edit_message_text(query,
             "Stil saqlandi. Endi yangi matnli stikerlar shu uslubda chiqadi.",
             reply_markup=_back_to_menu_button(),
         )
@@ -327,7 +346,7 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         user_prefs.awaiting_custom_color = value  # "bg" or "text"
         target = "fon" if value == "bg" else "matn"
         await query.answer()
-        await query.edit_message_text(
+        await _safe_edit_message_text(query,
             f"\U0001F3A8 {target.capitalize()} rangi uchun HEX kod yuboring, masalan: #FF5733"
         )
         return
@@ -342,7 +361,7 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         user_prefs.style.font_path = _font_path(value)
 
     await query.answer()
-    await query.edit_message_text(_style_summary(user_prefs.style), reply_markup=_style_keyboard(user_prefs.style))
+    await _safe_edit_message_text(query, _style_summary(user_prefs.style), reply_markup=_style_keyboard(user_prefs.style))
 
 
 # --------------------------------------------------------------------------
@@ -421,7 +440,7 @@ async def company_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if action == "setlogo":
         user_prefs.awaiting_logo = True
         await query.answer()
-        await query.edit_message_text(
+        await _safe_edit_message_text(query,
             "\U0001F4E4 Endi menga kompaniya logotipini yuboring.\n\n"
             "Eng yaxshi natija uchun uni \U0001F4CE **fayl (hujjat)** sifatida, PNG "
             "formatida yuboring - shunda shaffof fon saqlanib qoladi. Oddiy rasm "
@@ -446,7 +465,7 @@ async def company_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     await query.answer()
     has_logo = logo_store.has_logo(user.id)
-    await query.edit_message_text(
+    await _safe_edit_message_text(query,
         _company_text(user.id, user_prefs.company_mode, user_prefs.logo_outline_color),
         reply_markup=_company_keyboard(has_logo, user_prefs.company_mode, user_prefs.logo_outline_color),
     )
@@ -523,14 +542,14 @@ async def resize_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         field = parts[2]
         user_prefs.awaiting_resize_field = field
         await query.answer()
-        await query.edit_message_text(
+        await _safe_edit_message_text(query,
             f"✏️ Yangi {RESIZE_FIELD_NAMES[field]} qiymatini raqam qilib yuboring "
             f"({MIN_DIMENSION}-{MAX_DIMENSION})."
         )
         return
 
     await query.answer()
-    await query.edit_message_text(_resize_text(user_prefs), reply_markup=_resize_keyboard())
+    await _safe_edit_message_text(query, _resize_text(user_prefs), reply_markup=_resize_keyboard())
 
 
 async def _resize_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE, image_bytes: bytes) -> None:
@@ -600,7 +619,7 @@ async def pack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if action == "back":
         await query.answer()
-        await _render_mypacks(user.id, query.edit_message_text)
+        await _render_mypacks(user.id, partial(_safe_edit_message_text, query))
         return
 
     idx = int(parts[2])
@@ -612,7 +631,7 @@ async def pack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if action == "open":
         await query.answer()
-        await query.edit_message_text(
+        await _safe_edit_message_text(query,
             f"\U0001F4E6 {record.title}\n{record.count} ta stiker\n{pack_link(record.name)}",
             reply_markup=_pack_menu_keyboard(idx),
         )
@@ -621,17 +640,17 @@ async def pack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         session.count = record.count
         prefs.get(user.id).resize_mode = False
         await query.answer()
-        await query.edit_message_text(
+        await _safe_edit_message_text(query,
             f"✅ '{record.title}' to'plamiga davom etyapsiz. Rasm yoki matn yuboring, "
             "tugatgach /done bosing."
         )
     elif action == "rename":
         prefs.get(user.id).awaiting_rename_for = record.name
         await query.answer()
-        await query.edit_message_text(f"✏️ '{record.title}' uchun yangi nomni matn qilib yuboring.")
+        await _safe_edit_message_text(query, f"✏️ '{record.title}' uchun yangi nomni matn qilib yuboring.")
     elif action == "delete":
         await query.answer()
-        await query.edit_message_text(
+        await _safe_edit_message_text(query,
             f"\U0001F5D1 '{record.title}' to'plamini rostdan o'chirmoqchimisiz? Bu qaytarib bo'lmaydi.",
             reply_markup=InlineKeyboardMarkup(
                 [
@@ -647,14 +666,14 @@ async def pack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await context.bot.delete_sticker_set(record.name)
         except (BadRequest, TelegramError) as exc:
             await query.answer()
-            await query.edit_message_text(f"Xatolik: {exc.message}")
+            await _safe_edit_message_text(query, f"Xatolik: {exc.message}")
             return
         pack_registry.remove_pack(user.id, record.name)
         active = sessions.get(user.id)
         if active and active.set_name == record.name:
             sessions.clear(user.id)
         await query.answer("O'chirildi")
-        await query.edit_message_text(
+        await _safe_edit_message_text(query,
             f"\U0001F5D1 '{record.title}' o'chirildi.", reply_markup=_back_to_menu_button()
         )
 
