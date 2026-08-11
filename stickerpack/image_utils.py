@@ -21,7 +21,7 @@ def prepare_sticker_image(source: "str | Path | bytes | Image.Image") -> Image.I
     exactly ``STICKER_SIZE`` pixels, and converted to RGBA so transparency
     (if any) is preserved.
     """
-    image = _load_image(source)
+    image = load_image(source)
     image = image.convert("RGBA")
 
     width, height = image.size
@@ -46,7 +46,7 @@ def prepare_sticker_png_bytes(source: "str | Path | bytes | Image.Image") -> byt
     return image_to_png_bytes(prepare_sticker_image(source))
 
 
-def _load_image(source: "str | Path | bytes | Image.Image") -> Image.Image:
+def load_image(source: "str | Path | bytes | Image.Image") -> Image.Image:
     if isinstance(source, Image.Image):
         return source
     if isinstance(source, (bytes, bytearray)):

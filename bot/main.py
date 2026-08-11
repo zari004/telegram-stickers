@@ -38,6 +38,7 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("style", handlers.style_command))
     application.add_handler(CommandHandler("company", handlers.company_command))
     application.add_handler(CommandHandler("mypacks", handlers.mypacks_command))
+    application.add_handler(CommandHandler("resize", handlers.resize_command))
     application.add_handler(CommandHandler("done", handlers.done_command))
     application.add_handler(CommandHandler("cancel", handlers.cancel_command))
 
@@ -45,6 +46,7 @@ def build_application() -> Application:
     application.add_handler(CallbackQueryHandler(handlers.style_callback, pattern=r"^style:"))
     application.add_handler(CallbackQueryHandler(handlers.company_callback, pattern=r"^company:"))
     application.add_handler(CallbackQueryHandler(handlers.pack_callback, pattern=r"^pack:"))
+    application.add_handler(CallbackQueryHandler(handlers.resize_callback, pattern=r"^resize:"))
 
     application.add_handler(MessageHandler(filters.PHOTO, handlers.photo_handler))
     application.add_handler(MessageHandler(filters.Document.IMAGE, handlers.document_handler))

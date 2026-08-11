@@ -43,10 +43,15 @@ class UserPrefs:
     style: TextStickerStyle = field(default_factory=TextStickerStyle)
     company_mode: bool = False
     logo_outline_color: tuple[int, int, int, int] | None = None
+    resize_width: int = 1080
+    resize_height: int = 1080
+    resize_dpi: int = 72
+    resize_mode: bool = False
     awaiting_logo: bool = False
     awaiting_new_pack_title: bool = False
     awaiting_rename_for: str | None = None
     awaiting_custom_color: str | None = None  # "bg" or "text"
+    awaiting_resize_field: str | None = None  # "width", "height" or "dpi"
 
 
 class PrefsStore:
