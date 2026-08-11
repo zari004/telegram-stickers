@@ -20,6 +20,7 @@ from stickerpack import logo_store, pack_registry
 from stickerpack.compose import add_outline, layer_over_background
 from stickerpack.config import FONTS_DIR
 from stickerpack.image_utils import image_to_png_bytes, prepare_sticker_image
+from stickerpack.resizer import MAX_DIMENSION, MIN_DIMENSION, image_to_png_bytes_with_dpi, resize_to_canvas
 from stickerpack.sticker_api import DEFAULT_EMOJI, add_or_create, build_set_name, pack_link
 from stickerpack.text_sticker import TextStickerStyle, render_text_sticker
 
@@ -42,7 +43,7 @@ EMOJI_RE = re.compile(
 WELCOME_TEXT = (
     "Salom! Men senga Telegram uchun stiker to'plami yasashda yordam beraman. \U0001F60A\n\n"
     "Quyidagi tugmalardan birini tanla, yoki buyruqlardan foydalan:\n"
-    "/newpack <nomi>, /addtext <matn>, /style, /company, /mypacks, /done, /cancel"
+    "/newpack <nomi>, /addtext <matn>, /style, /company, /mypacks, /resize, /done, /cancel"
 )
 
 BG_CHOICES = [
@@ -75,6 +76,14 @@ LOGO_OUTLINE_STATES: list[tuple[str, tuple[int, int, int, int] | None]] = [
 LOGO_OUTLINE_WIDTH = 14
 
 COMPANY_PHOTO_SCALE = 0.82  # shrink uploaded photos so the logo frames them
+
+# (label, width, height, dpi_or_None) - dpi=None leaves the user's current DPI untouched
+RESIZE_PRESETS: list[tuple[str, int, int, int | None]] = [
+    ("Instagram post (1080x1080)", 1080, 1080, None),
+    ("Instagram Story (1080x1920)", 1080, 1920, None),
+    ("HD ekran (1920x1080)", 1920, 1080, None),
+    ("A4 chop etish (2480x3508, 300 dpi)", 2480, 3508, 300),
+]
 
 
 def extract_emoji(text: str | None) -> str | None:
@@ -127,6 +136,7 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton("\U0001F4E6 Mening to'plamlarim", callback_data="menu:mypacks")],
             [InlineKeyboardButton("\U0001F3A8 Stil sozlash", callback_data="menu:style")],
             [InlineKeyboardButton("\U0001F3E2 Kompaniya logotipi", callback_data="menu:company")],
+            [InlineKeyboardButton("\U0001F5BC Rasm o'lchamini o'zgartirish", callback_data="menu:resize")],
             [InlineKeyboardButton("❓ Yordam", callback_data="menu:help")],
         ]
     )
@@ -137,10 +147,12 @@ def _back_to_menu_button() -> InlineKeyboardMarkup:
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    prefs.get(update.effective_user.id).resize_mode = False
     await update.message.reply_text(WELCOME_TEXT, reply_markup=_main_menu_keyboard())
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    prefs.get(update.effective_user.id).resize_mode = False
     await update.message.reply_text(WELCOME_TEXT, reply_markup=_main_menu_keyboard())
 
 
@@ -151,7 +163,9 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await query.answer()
 
     if action == "newpack":
-        prefs.get(user.id).awaiting_new_pack_title = True
+        user_prefs = prefs.get(user.id)
+        user_prefs.resize_mode = False
+        user_prefs.awaiting_new_pack_title = True
         await query.edit_message_text(
             "\U0001F195 Yangi to'plam uchun nom yozing (masalan: Mening kulgichlarim)."
         )
@@ -162,7 +176,12 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await query.edit_message_text(_style_summary(style), reply_markup=_style_keyboard(style))
     elif action == "company":
         await _render_company(user.id, query.edit_message_text)
+    elif action == "resize":
+        user_prefs = prefs.get(user.id)
+        user_prefs.resize_mode = True
+        await query.edit_message_text(_resize_text(user_prefs), reply_markup=_resize_keyboard())
     elif action == "help":
+        prefs.get(user.id).resize_mode = False
         await query.edit_message_text(WELCOME_TEXT, reply_markup=_main_menu_keyboard())
 
 
@@ -183,6 +202,7 @@ async def newpack_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("To'plam nomini ham yozing: /newpack Mening to'plamim")
         return
 
+    prefs.get(user.id).resize_mode = False
     bot_username = (await context.bot.get_me()).username
     await _start_new_pack(user.id, title, bot_username)
     await update.message.reply_text(
@@ -446,6 +466,93 @@ def _apply_company_overlay(user_id: int, image: Image.Image, *, is_photo: bool) 
 
 
 # --------------------------------------------------------------------------
+# Resize any image to a preconfigured px size + DPI
+# --------------------------------------------------------------------------
+
+RESIZE_FIELD_NAMES = {"width": "kenglik (px)", "height": "balandlik (px)", "dpi": "DPI"}
+
+
+def _resize_text(user_prefs) -> str:
+    return (
+        "\U0001F5BC Rasm o'lchamini o'zgartirish\n\n"
+        f"Joriy sozlama: {user_prefs.resize_width}x{user_prefs.resize_height} px, "
+        f"{user_prefs.resize_dpi} dpi\n\n"
+        "Menga istalgan rasm(lar)ni yuboring - alohida rasm, fayl (hujjat) yoki bir "
+        "nechtasini ketma-ket ham - men har birini shu o'lchamda, o'zgarmagan "
+        "nisbatlarda (cho'zmasdan) qaytarib beraman.\n\n"
+        "O'lchamni pastdagi tugmalar bilan o'zgartiring:"
+    )
+
+
+def _resize_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(label, callback_data=f"resize:preset:{i}")]
+        for i, (label, _w, _h, _dpi) in enumerate(RESIZE_PRESETS)
+    ]
+    rows.append(
+        [
+            InlineKeyboardButton("✏️ Kenglik (px)", callback_data="resize:field:width"),
+            InlineKeyboardButton("✏️ Balandlik (px)", callback_data="resize:field:height"),
+        ]
+    )
+    rows.append([InlineKeyboardButton("✏️ DPI", callback_data="resize:field:dpi")])
+    rows.append([InlineKeyboardButton("\U0001F3E0 Bosh menyu", callback_data="menu:help")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def resize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_prefs = prefs.get(update.effective_user.id)
+    user_prefs.resize_mode = True
+    await update.message.reply_text(_resize_text(user_prefs), reply_markup=_resize_keyboard())
+
+
+async def resize_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = query.from_user
+    user_prefs = prefs.get(user.id)
+    parts = query.data.split(":")
+    action = parts[1]
+
+    if action == "preset":
+        _label, width, height, dpi = RESIZE_PRESETS[int(parts[2])]
+        user_prefs.resize_width = width
+        user_prefs.resize_height = height
+        if dpi is not None:
+            user_prefs.resize_dpi = dpi
+    elif action == "field":
+        field = parts[2]
+        user_prefs.awaiting_resize_field = field
+        await query.answer()
+        await query.edit_message_text(
+            f"✏️ Yangi {RESIZE_FIELD_NAMES[field]} qiymatini raqam qilib yuboring "
+            f"({MIN_DIMENSION}-{MAX_DIMENSION})."
+        )
+        return
+
+    await query.answer()
+    await query.edit_message_text(_resize_text(user_prefs), reply_markup=_resize_keyboard())
+
+
+async def _resize_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE, image_bytes: bytes) -> None:
+    user_prefs = prefs.get(update.effective_user.id)
+    width, height, dpi = user_prefs.resize_width, user_prefs.resize_height, user_prefs.resize_dpi
+
+    try:
+        image = resize_to_canvas(image_bytes, width, height)
+        png_bytes = image_to_png_bytes_with_dpi(image, dpi)
+    except Exception:
+        logger.exception("Unexpected error while resizing image")
+        await update.message.reply_text("Rasmni qayta ishlashda xatolik yuz berdi, qayta urinib ko'ring.")
+        return
+
+    await update.message.reply_document(
+        document=BytesIO(png_bytes),
+        filename=f"resized_{width}x{height}.png",
+        caption=f"\U0001F4D0 {width}x{height} px, {dpi} dpi",
+    )
+
+
+# --------------------------------------------------------------------------
 # My packs (list / continue / rename / delete)
 # --------------------------------------------------------------------------
 
@@ -512,6 +619,7 @@ async def pack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     elif action == "continue":
         session = sessions.start(user.id, set_name=record.name, title=record.title)
         session.count = record.count
+        prefs.get(user.id).resize_mode = False
         await query.answer()
         await query.edit_message_text(
             f"✅ '{record.title}' to'plamiga davom etyapsiz. Rasm yoki matn yuboring, "
@@ -585,6 +693,10 @@ async def _handle_incoming_image(update: Update, context: ContextTypes.DEFAULT_T
             "stikerlar shu logotip foniga qo'yiladi. /company orqali o'chirish, "
             "almashtirish yoki kontur qo'shish mumkin."
         )
+        return
+
+    if user_prefs.resize_mode:
+        await _resize_and_send(update, context, image_bytes)
         return
 
     session = sessions.get(user.id)
@@ -664,6 +776,21 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
 
+    if user_prefs.awaiting_resize_field:
+        field = user_prefs.awaiting_resize_field
+        user_prefs.awaiting_resize_field = None
+        try:
+            value = int(text)
+        except ValueError:
+            await update.message.reply_text("Bu butun son emas. Masalan: 1080 kabi yuboring.")
+            return
+        if not (MIN_DIMENSION <= value <= MAX_DIMENSION):
+            await update.message.reply_text(f"{MIN_DIMENSION} dan {MAX_DIMENSION} gacha qiymat kiriting.")
+            return
+        setattr(user_prefs, f"resize_{field}", value)
+        await update.message.reply_text(_resize_text(user_prefs), reply_markup=_resize_keyboard())
+        return
+
     if user_prefs.awaiting_custom_color:
         target = user_prefs.awaiting_custom_color  # "bg" or "text"
         color = _parse_hex_input(text)
@@ -700,6 +827,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if active and active.set_name == set_name:
             active.title = new_title
         await update.message.reply_text(f"✅ Nomi '{new_title}' ga o'zgartirildi.")
+        return
+
+    if user_prefs.resize_mode:
+        await update.message.reply_text(
+            "\U0001F5BC Rasm o'lchamini o'zgartirish rejimidasiz - menga rasm yoki fayl yuboring."
+        )
         return
 
     if sessions.get(user.id) is None:

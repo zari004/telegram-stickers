@@ -5,8 +5,9 @@ Telegram uchun stiker to'plami (sticker pack) yaratish vositalari. Uchta qism:
 1. **Interaktiv bot** (`bot/`) — foydalanuvchi rasm yoki matn yuboradi, bot uni
    stikerga aylantirib, o'z Telegram stiker to'plamiga qo'shadi. Hammasi
    tugmali menyu bilan boshqariladi; stil (rang/shrift) sozlash, kompaniya
-   logotipini fon qilib qo'yish va yaratilgan to'plamlarni ro'yxatlab
-   tahrirlash/o'chirish ham mumkin.
+   logotipini fon qilib qo'yish, yaratilgan to'plamlarni ro'yxatlab
+   tahrirlash/o'chirish va istalgan rasmni belgilangan o'lchamda qayta
+   hajmga keltirish ham mumkin.
 2. **Matndan stiker generatori** (`scripts/generate_text_stickers.py`) — hech
    qanday bot kerak emas, matn qatorlaridan 512x512 PNG stiker rasmlarini
    yasab beradi.
@@ -36,13 +37,14 @@ chiqadigan menyudan kerakli bo'limni tanlash kifoya, buyruqlarni yodlash
 shart emas.
 
 **Asosiy menyu** (`/start`):
-- \U0001F195 **Yangi to'plam** — nom so'raladi, yozgach to'plam boshlanadi
-- \U0001F4E6 **Mening to'plamlarim** — avval yaratilgan to'plamlar ro'yxati
-- \U0001F3A8 **Stil sozlash** — matnli stikerlar ko'rinishini tugmalar bilan sozlash
-- \U0001F3E2 **Kompaniya logotipi** — logotipni yuklab, avtomatik fon qilib qo'shish
+- 🆕 **Yangi to'plam** — nom so'raladi, yozgach to'plam boshlanadi
+- 📦 **Mening to'plamlarim** — avval yaratilgan to'plamlar ro'yxati
+- 🎨 **Stil sozlash** — matnli stikerlar ko'rinishini tugmalar bilan sozlash
+- 🏢 **Kompaniya logotipi** — logotipni yuklab, avtomatik fon qilib qo'shish
+- 🖼 **Rasm o'lchamini o'zgartirish** — istalgan rasmni belgilangan px/dpi da qaytaradi
 - ❓ **Yordam**
 
-**To'plam yaratish**: menyudan \U0001F195 tugmasini bosib nom yozing (yoki
+**To'plam yaratish**: menyudan 🆕 tugmasini bosib nom yozing (yoki
 `/newpack Nomi` buyrug'ini yuboring). Keyin:
 - Rasm yuboring — avtomatik stikerga aylantirib to'plamga qo'shadi
   (rasmga izoh sifatida bitta emoji yuborsangiz, o'shani ishlatadi, aks
@@ -54,12 +56,12 @@ shart emas.
 - `/done` — to'plamni yakunlaydi va `t.me/addstickers/...` havolasini beradi
 - `/cancel` — joriy to'plam yaratishni bekor qiladi
 
-**Stil sozlash** (`/style` yoki menyudagi \U0001F3A8 tugma): fon rangi, matn
+**Stil sozlash** (`/style` yoki menyudagi 🎨 tugma): fon rangi, matn
 rangi, chiziq (outline) yoniq/o'chiq va shrift (qalin/oddiy) — barchasi
 tugmalar bilan tanlanadi, tanlov saqlanadi va shu foydalanuvchining barcha
 keyingi matnli stikerlarida qo'llanadi.
 
-**Kompaniya logotipi** (`/company` yoki menyudagi \U0001F3E2 tugma):
+**Kompaniya logotipi** (`/company` yoki menyudagi 🏢 tugma):
 logotipingizni bir marta rasm qilib yuboring — u saqlanadi va "Kompaniya
 rejimi" yoqilganda keyingi barcha stikerlarning (matnli va rasmli)
 orqa foniga avtomatik qo'yiladi. Matnli stikerlarda fon shaffof bo'lib
@@ -68,17 +70,33 @@ biroz kichraytirilib, atrofidan logotip "ramka" bo'lib ko'rinadi.
 Tugmalar orqali istalgan payt yoqib/o'chirib yoki logotipni
 almashtirib/o'chirib turish mumkin.
 
-**Mening to'plamlarim** (`/mypacks` yoki menyudagi \U0001F4E6 tugma): bot
+**Mening to'plamlarim** (`/mypacks` yoki menyudagi 📦 tugma): bot
 o'zi yaratgan barcha to'plamlaringizni ro'yxat qilib ko'rsatadi (Telegram
 API "mening barcha to'plamlarim" degan so'rovni qo'llab-quvvatlamaydi,
 shuning uchun bot buni o'zi eslab qoladi — quyidagi "Eslatmalar" bo'limiga
 qarang). Har bir to'plamni tanlab:
 - ➕ davom qo'shish (yopilgan to'plamga yana stiker qo'shish)
 - ✏️ nomini o'zgartirish
-- \U0001F5D1 butunlay o'chirish (Telegram'dagi to'plamning o'zi ham o'chadi)
+- 🗑 butunlay o'chirish (Telegram'dagi to'plamning o'zi ham o'chadi)
 
 Har bir stiker to'plami avtomatik ravishda `<slug>_<user_id>_by_<bot_username>`
 nomi bilan yaratiladi — Telegramning nomlash talablariga mos keladi.
+
+**Rasm o'lchamini o'zgartirish** (`/resize` yoki menyudagi 🖼 tugma): stiker
+to'plami bilan bog'liq emas, mustaqil vosita — istalgan rasmni oldindan
+sozlangan o'lchamda qaytarib beradi:
+- Joriy sozlama (standart: `1080x1080 px, 72 dpi`) tugmalar bilan
+  o'zgartiriladi: tayyor shablonlardan (Instagram post/Story, HD ekran,
+  A4 chop etish @300dpi) birini tanlash yoki ✏️ tugmalari orqali
+  kenglik/balandlik/DPI ni qo'lda (px, butun son) kiritish mumkin.
+- Shundan keyin menga istalgan rasm yuboring — bittalab, ketma-ket bir
+  nechtasini, rasm sifatida yoki fayl (hujjat) sifatida — har birini shu
+  o'lchamda, nisbatini buzmasdan (cho'zmasdan, faqat ichiga sig'diradigan
+  qilib) qaytarib beraman. Natija PNG fayl sifatida, sarlavhasida
+  o'lcham va dpi yozilgan holda yuboriladi.
+- Boshqa bo'limga o'tsangiz (yangi to'plam boshlasangiz yoki bosh menyuga
+  qaytsangiz), bu rejim avtomatik o'chadi — tasodifan boshqa vaqt
+  yuborilgan rasmlar qayta o'lchamlanib ketmaydi.
 
 ## 2) Matndan stiker rasm(lar) generatsiya qilish
 
@@ -183,6 +201,7 @@ stickerpack/        - qayta ishlatiladigan yadro (bot va skriptlar ishlatadi)
   compose.py         - stiker tarkibini fon (kompaniya logotipi) ustiga joylaydi
   logo_store.py      - har bir foydalanuvchining kompaniya logotipini saqlaydi
   pack_registry.py   - foydalanuvchi yaratgan to'plamlar ro'yxatini saqlaydi
+  resizer.py         - istalgan rasmni belgilangan px o'lcham + dpi bilan qayta hajmga keltiradi
   config.py          - .env / BOT_TOKEN o'qish
 bot/                 - interaktiv Telegram bot
   main.py, handlers.py, state.py
