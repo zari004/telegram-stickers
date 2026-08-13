@@ -19,7 +19,7 @@ from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
 from stickerpack import logo_store, pack_registry
-from stickerpack.compose import add_outline, layer_over_background
+from stickerpack.compose import add_outline, add_watermark
 from stickerpack.config import FONTS_DIR
 from stickerpack.image_utils import image_to_png_bytes, prepare_sticker_image
 from stickerpack.resizer import MAX_DIMENSION, MIN_DIMENSION, image_to_png_bytes_with_dpi, resize_to_canvas
@@ -76,8 +76,6 @@ LOGO_OUTLINE_STATES: list[tuple[str, tuple[int, int, int, int] | None]] = [
     ("Qora", (30, 30, 30, 255)),
 ]
 LOGO_OUTLINE_WIDTH = 14
-
-COMPANY_PHOTO_SCALE = 0.82  # shrink uploaded photos so the logo frames them
 
 # (label, width, height, dpi_or_None) - dpi=None leaves the user's current DPI untouched
 RESIZE_PRESETS: list[tuple[str, int, int, int | None]] = [
@@ -394,8 +392,9 @@ def _company_text(user_id: int, company_mode: bool, outline_color: tuple[int, in
         + mode_line
         + outline_line
         + "\n\nYoqilgan bo'lsa, logotipingiz yangi matnli va rasmli stikerlarning "
-        "orqa foniga avtomatik qo'yiladi. Logotipni PNG fayl (hujjat) sifatida "
-        "yuborsangiz, shaffof fon saqlanib qoladi va kontur uning shakliga mos chiqadi."
+        "pastki qismiga kichik belgi (watermark) sifatida qo'yiladi. Logotipni "
+        "PNG fayl (hujjat) sifatida yuborsangiz, shaffof fon saqlanib qoladi va "
+        "kontur uning shakliga mos chiqadi."
     )
 
 
@@ -472,7 +471,7 @@ async def company_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
 
-def _apply_company_overlay(user_id: int, image: Image.Image, *, is_photo: bool) -> Image.Image:
+def _apply_company_overlay(user_id: int, image: Image.Image) -> Image.Image:
     user_prefs = prefs.get(user_id)
     if not user_prefs.company_mode:
         return image
@@ -481,8 +480,7 @@ def _apply_company_overlay(user_id: int, image: Image.Image, *, is_photo: bool) 
         return image
     if user_prefs.logo_outline_color:
         logo = add_outline(logo, color=user_prefs.logo_outline_color, width=LOGO_OUTLINE_WIDTH)
-    scale = COMPANY_PHOTO_SCALE if is_photo else 1.0
-    return layer_over_background(image, logo, foreground_scale=scale)
+    return add_watermark(image, logo)
 
 
 # --------------------------------------------------------------------------
@@ -738,7 +736,7 @@ async def _handle_incoming_image(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         image = prepare_sticker_image(image_bytes)
-        image = _apply_company_overlay(user.id, image, is_photo=True)
+        image = _apply_company_overlay(user.id, image)
         png_bytes = image_to_png_bytes(image)
         await add_or_create(
             context.bot,
@@ -888,7 +886,7 @@ async def _add_text_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
     try:
         image = render_text_sticker(text, style)
-        image = _apply_company_overlay(user.id, image, is_photo=False)
+        image = _apply_company_overlay(user.id, image)
         png_bytes = image_to_png_bytes(image)
         await add_or_create(
             context.bot,
