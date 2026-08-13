@@ -90,11 +90,12 @@ async def create_sticker_pack(
     user_id: int,
     set_name: str,
     title: str,
-    png_bytes: bytes,
+    media_bytes: bytes,
     emoji: str = DEFAULT_EMOJI,
+    sticker_format: str = "static",
 ) -> None:
     async def call() -> None:
-        sticker = InputSticker(sticker=BytesIO(png_bytes), emoji_list=[emoji], format="static")
+        sticker = InputSticker(sticker=BytesIO(media_bytes), emoji_list=[emoji], format=sticker_format)
         await bot.create_new_sticker_set(
             user_id=user_id,
             name=set_name,
@@ -110,11 +111,12 @@ async def add_sticker_to_pack(
     *,
     user_id: int,
     set_name: str,
-    png_bytes: bytes,
+    media_bytes: bytes,
     emoji: str = DEFAULT_EMOJI,
+    sticker_format: str = "static",
 ) -> None:
     async def call() -> None:
-        sticker = InputSticker(sticker=BytesIO(png_bytes), emoji_list=[emoji], format="static")
+        sticker = InputSticker(sticker=BytesIO(media_bytes), emoji_list=[emoji], format=sticker_format)
         await bot.add_sticker_to_set(user_id=user_id, name=set_name, sticker=sticker)
 
     await _with_retry(call)
@@ -126,8 +128,9 @@ async def add_or_create(
     user_id: int,
     set_name: str,
     title: str,
-    png_bytes: bytes,
+    media_bytes: bytes,
     emoji: str = DEFAULT_EMOJI,
+    sticker_format: str = "static",
 ) -> bool:
     """Add a sticker to ``set_name``, creating the pack first if needed.
 
@@ -136,7 +139,12 @@ async def add_or_create(
     """
     if await sticker_set_exists(bot, set_name):
         await add_sticker_to_pack(
-            bot, user_id=user_id, set_name=set_name, png_bytes=png_bytes, emoji=emoji
+            bot,
+            user_id=user_id,
+            set_name=set_name,
+            media_bytes=media_bytes,
+            emoji=emoji,
+            sticker_format=sticker_format,
         )
         return False
 
@@ -145,7 +153,8 @@ async def add_or_create(
         user_id=user_id,
         set_name=set_name,
         title=title,
-        png_bytes=png_bytes,
+        media_bytes=media_bytes,
         emoji=emoji,
+        sticker_format=sticker_format,
     )
     return True

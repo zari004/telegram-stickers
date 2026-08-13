@@ -86,7 +86,7 @@ async def run(args: argparse.Namespace) -> None:
                     user_id=args.user_id,
                     set_name=set_name,
                     title=args.title,
-                    png_bytes=png_bytes,
+                    media_bytes=png_bytes,
                     emoji=emoji,
                 )
             except TelegramError as exc:

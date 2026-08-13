@@ -13,6 +13,7 @@ class PackSession:
     set_name: str
     title: str
     count: int = 0
+    sticker_format: str | None = None  # "static" or "video"; None = still empty
 
 
 class SessionStore:

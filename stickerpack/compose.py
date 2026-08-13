@@ -26,7 +26,7 @@ def add_watermark(
     scale: float = 0.22,
     margin: int = 22,
 ) -> Image.Image:
-    """Paste ``logo`` small and bottom-centered on top of ``base``, as a watermark.
+    """Paste ``logo`` small in the bottom-right corner of ``base``, as a watermark.
 
     ``scale`` caps the logo's longest side at that fraction of the canvas
     (e.g. 0.22 = at most 22% of the sticker's width/height), so it reads as
@@ -40,7 +40,7 @@ def add_watermark(
     new_size = (max(1, round(logo.width * logo_scale)), max(1, round(logo.height * logo_scale)))
     logo_resized = logo.resize(new_size, Image.LANCZOS)
 
-    x = (base.width - logo_resized.width) // 2
+    x = base.width - logo_resized.width - margin
     y = base.height - logo_resized.height - margin
 
     result = base.copy()
