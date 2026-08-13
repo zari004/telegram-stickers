@@ -25,12 +25,18 @@ def add_watermark(
     *,
     scale: float = 0.22,
     margin: int = 22,
+    gap: int = 14,
 ) -> Image.Image:
-    """Paste ``logo`` small in the bottom-right corner of ``base``, as a watermark.
+    """Paste ``logo`` small just below the sticker's content, bottom-right aligned.
 
     ``scale`` caps the logo's longest side at that fraction of the canvas
     (e.g. 0.22 = at most 22% of the sticker's width/height), so it reads as
-    a small badge rather than taking over the sticker.
+    a small badge rather than taking over the sticker. The vertical position
+    follows the actual content (e.g. short text near the top) via the alpha
+    channel's bounding box, rather than always sitting at the canvas edge -
+    for a fully opaque sticker (solid background, or a photo filling the
+    frame) the bounding box covers the whole canvas, so it falls back to the
+    same near-the-edge placement as before.
     """
     base = fit_to_canvas(base)
     logo = logo.convert("RGBA")
@@ -40,8 +46,11 @@ def add_watermark(
     new_size = (max(1, round(logo.width * logo_scale)), max(1, round(logo.height * logo_scale)))
     logo_resized = logo.resize(new_size, Image.LANCZOS)
 
+    content_bbox = base.split()[-1].getbbox()
+    content_bottom = content_bbox[3] if content_bbox else base.height
+
     x = base.width - logo_resized.width - margin
-    y = base.height - logo_resized.height - margin
+    y = max(margin, min(content_bottom + gap, base.height - logo_resized.height - margin))
 
     result = base.copy()
     result.alpha_composite(logo_resized, (x, y))

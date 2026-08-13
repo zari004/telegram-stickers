@@ -57,11 +57,13 @@ shart emas.
   (Telegram video-stiker talablariga mos WEBM/VP9 formatga avtomatik
   o'giradi: uzunligi 3 soniyagacha qisqartiriladi, o'lchami 512px ga
   moslashtiriladi, hajmi 256KB dan oshmasligi uchun sifat avtomatik
-  pasaytiriladi). **Muhim**: Telegram bitta stiker to'plamida statik
-  (rasm/matn) va video stikerlarni aralashtirishga ruxsat bermaydi — bir
-  to'plamga qo'shgan birinchi stiker turi o'sha to'plamning formatini
-  belgilaydi; boshqa turdagi stiker uchun `/newpack` bilan alohida
-  to'plam boshlash kerak. Bepul Render instansida video konvertatsiya
+  pasaytiriladi). Rasm/matn va GIFlarni bitta to'plamda istagan tartibda
+  aralashtirib yuborish mumkin — Telegram bitta to'plamda ikkala formatni
+  birga saqlamaydi, shuning uchun kerak bo'lganda bot buni fonda avtomatik
+  moslashtiradi: agar to'plam GIF bilan boshlangan bo'lsa, keyin yuborgan
+  matn/rasm ham qisqa video-stikerga aylantiriladi; agar to'plam matn/rasm
+  bilan boshlangan bo'lsa, keyin yuborgan GIFning birinchi kadri statik
+  rasm sifatida qo'shiladi. Bepul Render instansida video konvertatsiya
   protsessor kuchi cheklangani sabab bir necha o'n soniya davom etishi
   mumkin — shoshilmang, "GIF video-stikerga o'girilmoqda..." xabari
   chiqqach kuting.
