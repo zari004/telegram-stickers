@@ -57,11 +57,13 @@ shart emas.
 - `/cancel` — joriy to'plam yaratishni bekor qiladi
 
 **Stil sozlash** (`/style` yoki menyudagi 🎨 tugma): fon rangi, matn
-rangi, chiziq (outline) yoniq/o'chiq va shrift (qalin/oddiy) — barchasi
-tugmalar bilan tanlanadi, tanlov saqlanadi va shu foydalanuvchining barcha
-keyingi matnli stikerlarida qo'llanadi. Matn rangi ro'yxatining eng
-boshida 💚 **Yashil gradient** varianti ham bor — matn chapdan o'ngga
-to'q yashildan yorqin yashilga o'tuvchi gradient rangda chiqadi.
+rangi, chiziq (outline) rangi (yoki o'chirish) va shrift (qalin/oddiy) —
+barchasi tugmalar bilan tanlanadi (fon, matn va chiziq uchun HEX kod
+kiritish orqali istalgan boshqa rangni ham tanlash mumkin), tanlov
+saqlanadi va shu foydalanuvchining barcha keyingi matnli stikerlarida
+qo'llanadi. Matn rangi ro'yxatining eng boshida 💚 **Yashil gradient**
+varianti ham bor — matn chapdan o'ngga to'q yashildan yorqin yashilga
+o'tuvchi gradient rangda chiqadi.
 
 **Kompaniya logotipi** (`/company` yoki menyudagi 🏢 tugma):
 logotipingizni bir marta rasm qilib yuboring — u saqlanadi va "Kompaniya

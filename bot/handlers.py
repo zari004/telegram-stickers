@@ -70,6 +70,14 @@ TEXT_COLOR_CHOICES = [
     ("Qizil", "EB5757"),
     ("Ko'k", "2D9CDB"),
 ]
+OUTLINE_COLOR_CHOICES = [
+    ("O'CHIQ", None),
+    ("Oq", "FFFFFF"),
+    ("Qora", "1E1E1E"),
+    ("Sariq", "FFD600"),
+    ("Qizil", "EB5757"),
+    ("Ko'k", "2D9CDB"),
+]
 FONT_CHOICES = [
     ("Qalin", "DejaVuSans-Bold.ttf"),
     ("Oddiy", "DejaVuSans.ttf"),
@@ -283,12 +291,11 @@ def _text_color_name(style: TextStickerStyle) -> str:
 
 
 def _style_summary(style: TextStickerStyle) -> str:
-    outline_label = "yoniq" if style.outline_color else "o'chiq"
     return (
         "\U0001F3A8 Matnli stiker stili:\n"
         f"Fon: {_color_name(BG_CHOICES, style.background_color)}\n"
         f"Matn rangi: {_text_color_name(style)}\n"
-        f"Chiziq: {outline_label}\n"
+        f"Chiziq rangi: {_color_name(OUTLINE_COLOR_CHOICES, style.outline_color)}\n"
         f"Shrift: {_font_name(style.font_path)}\n\n"
         "Tugmalar orqali o'zgartiring:"
     )
@@ -320,7 +327,13 @@ def _style_keyboard(style: TextStickerStyle) -> InlineKeyboardMarkup:
         )
         for name, filename in FONT_CHOICES
     ]
-    outline_label = "\U0001F532 Chiziq: YONIQ" if style.outline_color else "⬜ Chiziq: O'CHIQ"
+    outline_buttons = [
+        InlineKeyboardButton(
+            mark(name, _hex_to_rgba(hex_v) == style.outline_color),
+            callback_data=f"style:outline:{hex_v or 'none'}",
+        )
+        for name, hex_v in OUTLINE_COLOR_CHOICES
+    ]
 
     rows = [
         *_chunk(bg_buttons, 4),
@@ -328,7 +341,8 @@ def _style_keyboard(style: TextStickerStyle) -> InlineKeyboardMarkup:
         *_chunk(text_buttons, 3),
         [InlineKeyboardButton("\U0001F3A8 Boshqa matn rangi (HEX)", callback_data="style:custompick:text")],
         *_chunk(font_buttons, 2),
-        [InlineKeyboardButton(outline_label, callback_data="style:outline:toggle")],
+        *_chunk(outline_buttons, 3),
+        [InlineKeyboardButton("\U0001F3A8 Boshqa chiziq rangi (HEX)", callback_data="style:custompick:outline")],
         [InlineKeyboardButton("✅ Saqlash", callback_data="style:close")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -356,8 +370,8 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     if kind == "custompick":
-        user_prefs.awaiting_custom_color = value  # "bg" or "text"
-        target = "fon" if value == "bg" else "matn"
+        user_prefs.awaiting_custom_color = value  # "bg", "text" or "outline"
+        target = {"bg": "fon", "text": "matn", "outline": "chiziq"}[value]
         await query.answer()
         await _safe_edit_message_text(query,
             f"\U0001F3A8 {target.capitalize()} rangi uchun HEX kod yuboring, masalan: #FF5733"
@@ -373,7 +387,7 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             user_prefs.style.text_gradient = None
             user_prefs.style.text_color = _hex_to_rgba(value)
     elif kind == "outline":
-        user_prefs.style.outline_color = None if user_prefs.style.outline_color else (255, 255, 255, 255)
+        user_prefs.style.outline_color = None if value == "none" else _hex_to_rgba(value)
     elif kind == "font":
         user_prefs.style.font_path = _font_path(value)
 
@@ -830,7 +844,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     if user_prefs.awaiting_custom_color:
-        target = user_prefs.awaiting_custom_color  # "bg" or "text"
+        target = user_prefs.awaiting_custom_color  # "bg", "text" or "outline"
         color = _parse_hex_input(text)
         if color is None:
             await update.message.reply_text(
@@ -841,6 +855,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         user_prefs.awaiting_custom_color = None
         if target == "bg":
             user_prefs.style.background_color = color
+        elif target == "outline":
+            user_prefs.style.outline_color = color
         else:
             user_prefs.style.text_gradient = None
             user_prefs.style.text_color = color
