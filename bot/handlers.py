@@ -130,6 +130,15 @@ def _hex_to_rgba(hex_value: str | None) -> tuple[int, int, int, int] | None:
     return (r, g, b, 255)
 
 
+def _colors_clash(a: tuple[int, int, int, int] | None, b: tuple[int, int, int, int] | None) -> bool:
+    """True if two colors are close enough that text drawn in `a` with an
+    outline in `b` would be hard to tell apart (same color picked for both,
+    or near-identical shades)."""
+    if a is None or b is None:
+        return False
+    return sum((a[i] - b[i]) ** 2 for i in range(3)) ** 0.5 < 40
+
+
 HEX_INPUT_RE = re.compile(r"^#?([0-9a-fA-F]{6})$")
 
 
@@ -391,7 +400,12 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif kind == "font":
         user_prefs.style.font_path = _font_path(value)
 
-    await query.answer()
+    warning = None
+    if kind in ("text", "outline") and not user_prefs.style.text_gradient:
+        if _colors_clash(user_prefs.style.text_color, user_prefs.style.outline_color):
+            warning = "⚠️ Matn va chiziq rangi bir-biriga juda yaqin — matn ko'rinmasligi mumkin!"
+
+    await query.answer(warning, show_alert=bool(warning))
     await _safe_edit_message_text(query, _style_summary(user_prefs.style), reply_markup=_style_keyboard(user_prefs.style))
 
 
@@ -860,9 +874,15 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         else:
             user_prefs.style.text_gradient = None
             user_prefs.style.text_color = color
-        await update.message.reply_text(
-            _style_summary(user_prefs.style), reply_markup=_style_keyboard(user_prefs.style)
-        )
+
+        summary = _style_summary(user_prefs.style)
+        if (
+            target in ("text", "outline")
+            and not user_prefs.style.text_gradient
+            and _colors_clash(user_prefs.style.text_color, user_prefs.style.outline_color)
+        ):
+            summary = "⚠️ Matn va chiziq rangi bir-biriga juda yaqin — matn ko'rinmasligi mumkin!\n\n" + summary
+        await update.message.reply_text(summary, reply_markup=_style_keyboard(user_prefs.style))
         return
 
     if user_prefs.awaiting_rename_for:
