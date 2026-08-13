@@ -26,7 +26,7 @@ from stickerpack.image_utils import image_to_png_bytes, prepare_sticker_image
 from stickerpack.resizer import MAX_DIMENSION, MIN_DIMENSION, image_to_png_bytes_with_dpi, resize_to_canvas
 from stickerpack.sticker_api import DEFAULT_EMOJI, add_or_create, build_set_name, pack_link
 from stickerpack.text_sticker import TextStickerStyle, render_text_sticker
-from stickerpack.video_sticker import convert_to_video_sticker
+from stickerpack.video_sticker import convert_to_video_sticker, extract_first_frame, image_to_video_sticker
 
 from .state import MAX_STICKERS_PER_PACK, prefs, sessions
 
@@ -268,9 +268,11 @@ async def newpack_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(
         f"✅ '{title}' to'plami boshlandi.\n"
         "Endi menga rasm yuboring, matn yozing yoki GIF/animatsiya yuboring - har biri "
-        "to'plamga stiker sifatida qo'shiladi (rasm/matn va GIF stikerlarini bitta "
-        "to'plamda aralashtirib bo'lmaydi - birinchi qo'shgan turingiz shu to'plamning "
-        "formatini belgilaydi). Tugatgach /done ni bosing.\n\n"
+        "to'plamga stiker sifatida qo'shiladi. Rasm/matn va GIFlarni istagan tartibda "
+        "aralashtirib yuborishingiz mumkin - Telegram bitta to'plamda ikkalasini birga "
+        "saqlamaydi, shuning uchun kerak bo'lganda bot fonda avtomatik moslashtiradi "
+        "(masalan, GIFdan keyin matn yuborsangiz, matn ham qisqa videoga aylantiriladi). "
+        "Tugatgach /done ni bosing.\n\n"
         "Xohlasangiz avval /style bilan ko'rinishni yoki /company bilan "
         "kompaniya logotipini sozlashingiz mumkin."
     )
@@ -885,13 +887,6 @@ async def _handle_incoming_image(update: Update, context: ContextTypes.DEFAULT_T
             "Avval yangi to'plam boshlang: /newpack nomi yoki /start dagi \U0001F195 tugmasi orqali."
         )
         return
-    if session.sticker_format == "video":
-        await update.message.reply_text(
-            "Bu to'plam video/GIF stikerlar uchun boshlangan — Telegram bitta to'plamda "
-            "statik va video stikerlarni aralashtirishga ruxsat bermaydi. Rasm/matn "
-            "stikerlari uchun /newpack bilan alohida yangi to'plam boshlang."
-        )
-        return
     if session.count >= MAX_STICKERS_PER_PACK:
         await update.message.reply_text(
             f"Bu to'plamda allaqachon {MAX_STICKERS_PER_PACK} ta stiker bor (Telegram "
@@ -900,35 +895,52 @@ async def _handle_incoming_image(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     emoji = extract_emoji(update.message.caption) or DEFAULT_EMOJI
+    status_message = None
 
     try:
         image = prepare_sticker_image(image_bytes)
         image = _apply_company_overlay(user.id, image)
         png_bytes = image_to_png_bytes(image)
+
+        if session.sticker_format == "video":
+            # This pack was started with a GIF, so it can only hold video
+            # stickers - turn this static image into a trivial looping clip
+            # instead of rejecting it outright.
+            status_message = await update.message.reply_text(
+                "\U0001F504 Video-formatdagi to'plamga moslashtirilyapti..."
+            )
+            media_bytes = await asyncio.to_thread(image_to_video_sticker, png_bytes)
+            sticker_format = "video"
+        else:
+            media_bytes = png_bytes
+            sticker_format = "static"
+
         await add_or_create(
             context.bot,
             user_id=user.id,
             set_name=session.set_name,
             title=session.title,
-            media_bytes=png_bytes,
+            media_bytes=media_bytes,
             emoji=emoji,
-            sticker_format="static",
+            sticker_format=sticker_format,
         )
     except (BadRequest, TelegramError) as exc:
         logger.warning("Sticker add failed: %s", exc)
-        await update.message.reply_text(f"Xatolik yuz berdi: {exc.message}")
+        text = f"Xatolik yuz berdi: {exc.message}"
+        await (status_message.edit_text(text) if status_message else update.message.reply_text(text))
         return
     except Exception:
         logger.exception("Unexpected error while adding sticker")
-        await update.message.reply_text("Kutilmagan xatolik yuz berdi, qayta urinib ko'ring.")
+        text = "Kutilmagan xatolik yuz berdi, qayta urinib ko'ring."
+        await (status_message.edit_text(text) if status_message else update.message.reply_text(text))
         return
 
-    session.sticker_format = "static"
+    session.sticker_format = sticker_format
     sessions.bump(user.id)
-    pack_registry.upsert_pack(user.id, session.set_name, session.title, session.count, sticker_format="static")
-    await update.message.reply_text(
-        f"➕ Qo'shildi ({session.count}/{MAX_STICKERS_PER_PACK}). Davom eting yoki /done bosing."
-    )
+    pack_registry.upsert_pack(user.id, session.set_name, session.title, session.count, sticker_format=sticker_format)
+    label = "Video-stiker" if sticker_format == "video" else "Stiker"
+    text = f"➕ {label} qo'shildi ({session.count}/{MAX_STICKERS_PER_PACK}). Davom eting yoki /done bosing."
+    await (status_message.edit_text(text) if status_message else update.message.reply_text(text))
 
 
 # --------------------------------------------------------------------------
@@ -953,13 +965,6 @@ async def gif_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "Avval yangi to'plam boshlang: /newpack nomi yoki /start dagi \U0001F195 tugmasi orqali."
         )
         return
-    if session.sticker_format == "static":
-        await update.message.reply_text(
-            "Bu to'plam rasm/matn stikerlar uchun boshlangan — Telegram bitta to'plamda "
-            "statik va video stikerlarni aralashtirishga ruxsat bermaydi. GIF stikerlar "
-            "uchun /newpack bilan alohida yangi to'plam boshlang."
-        )
-        return
     if session.count >= MAX_STICKERS_PER_PACK:
         await update.message.reply_text(
             f"Bu to'plamda allaqachon {MAX_STICKERS_PER_PACK} ta stiker bor (Telegram "
@@ -972,17 +977,31 @@ async def gif_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     source_bytes = bytes(await tg_file.download_as_bytearray())
 
     emoji = extract_emoji(update.message.caption) or DEFAULT_EMOJI
+    want_static = session.sticker_format == "static"
     status_message = await update.message.reply_text(
-        "\U0001F504 GIF video-stikerga o'girilmoqda, biroz kuting..."
+        "\U0001F504 GIFning birinchi kadri statik stikerga o'girilmoqda..."
+        if want_static
+        else "\U0001F504 GIF video-stikerga o'girilmoqda, biroz kuting..."
     )
 
     try:
-        webm_bytes = await asyncio.to_thread(convert_to_video_sticker, source_bytes)
+        if want_static:
+            # This pack already holds static stickers, so the GIF can't join
+            # as a video sticker (Telegram allows only one format per pack) -
+            # fall back to its first frame as a still image instead.
+            frame_png = await asyncio.to_thread(extract_first_frame, source_bytes)
+            image = prepare_sticker_image(frame_png)
+            image = _apply_company_overlay(user.id, image)
+            media_bytes = image_to_png_bytes(image)
+            sticker_format = "static"
+        else:
+            media_bytes = await asyncio.to_thread(convert_to_video_sticker, source_bytes)
+            sticker_format = "video"
     except Exception:
-        logger.exception("Unexpected error while converting GIF to a video sticker")
+        logger.exception("Unexpected error while converting GIF")
         await status_message.edit_text(
-            "GIFni video-stikerga o'girishda xatolik yuz berdi (juda uzun yoki formatida "
-            "muammo bo'lishi mumkin). Boshqa GIF bilan urinib ko'ring."
+            "GIFni qayta ishlashda xatolik yuz berdi (juda uzun yoki formatida muammo "
+            "bo'lishi mumkin). Boshqa GIF bilan urinib ko'ring."
         )
         return
 
@@ -992,24 +1011,25 @@ async def gif_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             user_id=user.id,
             set_name=session.set_name,
             title=session.title,
-            media_bytes=webm_bytes,
+            media_bytes=media_bytes,
             emoji=emoji,
-            sticker_format="video",
+            sticker_format=sticker_format,
         )
     except (BadRequest, TelegramError) as exc:
-        logger.warning("Video sticker add failed: %s", exc)
+        logger.warning("Sticker add failed: %s", exc)
         await status_message.edit_text(f"Xatolik yuz berdi: {exc.message}")
         return
     except Exception:
-        logger.exception("Unexpected error while adding video sticker")
+        logger.exception("Unexpected error while adding sticker")
         await status_message.edit_text("Kutilmagan xatolik yuz berdi, qayta urinib ko'ring.")
         return
 
-    session.sticker_format = "video"
+    session.sticker_format = sticker_format
     sessions.bump(user.id)
-    pack_registry.upsert_pack(user.id, session.set_name, session.title, session.count, sticker_format="video")
+    pack_registry.upsert_pack(user.id, session.set_name, session.title, session.count, sticker_format=sticker_format)
+    label = "Stiker (GIFning birinchi kadri)" if sticker_format == "static" else "Video-stiker"
     await status_message.edit_text(
-        f"➕ Video-stiker qo'shildi ({session.count}/{MAX_STICKERS_PER_PACK}). Davom eting yoki /done bosing."
+        f"➕ {label} qo'shildi ({session.count}/{MAX_STICKERS_PER_PACK}). Davom eting yoki /done bosing."
     )
 
 
@@ -1043,8 +1063,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(
             f"✅ '{text}' to'plami boshlandi.\n"
             "Endi menga rasm, matn yoki GIF/animatsiya yuboring - har biri to'plamga "
-            "stiker sifatida qo'shiladi (rasm/matn va GIF stikerlarini bitta to'plamda "
-            "aralashtirib bo'lmaydi). Tugatgach /done ni bosing."
+            "stiker sifatida qo'shiladi, istagan tartibda aralashtirishingiz mumkin. "
+            "Tugatgach /done ni bosing."
         )
         return
 
@@ -1130,13 +1150,6 @@ async def _add_text_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if session is None:
         await update.message.reply_text("Avval /newpack nomi bilan to'plam boshlang.")
         return
-    if session.sticker_format == "video":
-        await update.message.reply_text(
-            "Bu to'plam video/GIF stikerlar uchun boshlangan — Telegram bitta to'plamda "
-            "statik va video stikerlarni aralashtirishga ruxsat bermaydi. Matnli stikerlar "
-            "uchun /newpack bilan alohida yangi to'plam boshlang."
-        )
-        return
     if session.count >= MAX_STICKERS_PER_PACK:
         await update.message.reply_text(
             f"Bu to'plamda allaqachon {MAX_STICKERS_PER_PACK} ta stiker bor. /done bilan yakunlang."
@@ -1152,31 +1165,52 @@ async def _add_text_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if has_logo and style.background_color is not None:
         style = replace(style, background_color=None)  # let the logo show through
 
+    status_message = None
+
     try:
         image = render_text_sticker(text, style)
         image = _apply_company_overlay(user.id, image)
         png_bytes = image_to_png_bytes(image)
+
+        if session.sticker_format == "video":
+            # This pack was started with a GIF, so it can only hold video
+            # stickers - turn this text sticker into a trivial looping clip
+            # instead of rejecting it outright.
+            status_message = await update.message.reply_text(
+                "\U0001F504 Video-formatdagi to'plamga moslashtirilyapti..."
+            )
+            media_bytes = await asyncio.to_thread(image_to_video_sticker, png_bytes)
+            sticker_format = "video"
+        else:
+            media_bytes = png_bytes
+            sticker_format = "static"
+
         await add_or_create(
             context.bot,
             user_id=user.id,
             set_name=session.set_name,
             title=session.title,
-            media_bytes=png_bytes,
+            media_bytes=media_bytes,
             emoji=emoji,
-            sticker_format="static",
+            sticker_format=sticker_format,
         )
     except (BadRequest, TelegramError) as exc:
         logger.warning("Sticker add failed: %s", exc)
-        await update.message.reply_text(f"Xatolik yuz berdi: {exc.message}")
+        text_out = f"Xatolik yuz berdi: {exc.message}"
+        await (status_message.edit_text(text_out) if status_message else update.message.reply_text(text_out))
         return
     except Exception:
         logger.exception("Unexpected error while adding text sticker")
-        await update.message.reply_text("Kutilmagan xatolik yuz berdi, qayta urinib ko'ring.")
+        text_out = "Kutilmagan xatolik yuz berdi, qayta urinib ko'ring."
+        await (status_message.edit_text(text_out) if status_message else update.message.reply_text(text_out))
         return
 
-    session.sticker_format = "static"
+    session.sticker_format = sticker_format
     sessions.bump(user.id)
-    pack_registry.upsert_pack(user.id, session.set_name, session.title, session.count, sticker_format="static")
-    await update.message.reply_text(
-        f"➕ Qo'shildi ({session.count}/{MAX_STICKERS_PER_PACK}). Davom eting yoki /done bosing."
-    )
+    pack_registry.upsert_pack(user.id, session.set_name, session.title, session.count, sticker_format=sticker_format)
+    label = "Video-stiker" if sticker_format == "video" else "Stiker"
+    text_out = f"➕ {label} qo'shildi ({session.count}/{MAX_STICKERS_PER_PACK}). Davom eting yoki /done bosing."
+    if status_message:
+        await status_message.edit_text(text_out)
+    else:
+        await update.message.reply_text(text_out)
