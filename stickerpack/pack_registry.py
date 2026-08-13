@@ -26,6 +26,7 @@ class PackRecord:
     name: str
     title: str
     count: int = 0
+    sticker_format: str = "static"  # "static" or "video"
     created_at: str = ""
 
 
@@ -54,7 +55,7 @@ def get_pack(user_id: int, name: str) -> PackRecord | None:
     return None
 
 
-def upsert_pack(user_id: int, name: str, title: str, count: int) -> None:
+def upsert_pack(user_id: int, name: str, title: str, count: int, sticker_format: str = "static") -> None:
     with _lock:
         data = _load()
         records = data.setdefault(str(user_id), [])
@@ -62,6 +63,7 @@ def upsert_pack(user_id: int, name: str, title: str, count: int) -> None:
             if rec["name"] == name:
                 rec["title"] = title
                 rec["count"] = count
+                rec["sticker_format"] = sticker_format
                 break
         else:
             records.append(
@@ -69,6 +71,7 @@ def upsert_pack(user_id: int, name: str, title: str, count: int) -> None:
                     "name": name,
                     "title": title,
                     "count": count,
+                    "sticker_format": sticker_format,
                     "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 }
             )

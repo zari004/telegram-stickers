@@ -13,6 +13,7 @@ class PackSession:
     set_name: str
     title: str
     count: int = 0
+    sticker_format: str | None = None  # "static" or "video"; None = still empty
 
 
 class SessionStore:
@@ -52,6 +53,7 @@ class UserPrefs:
     awaiting_rename_for: str | None = None
     awaiting_custom_color: str | None = None  # "bg" or "text"
     awaiting_resize_field: str | None = None  # "width", "height" or "dpi"
+    awaiting_custom_font: bool = False
 
 
 class PrefsStore:

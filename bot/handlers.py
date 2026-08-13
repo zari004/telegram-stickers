@@ -6,6 +6,7 @@ for people who like that, and as inline-keyboard buttons reachable from
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from dataclasses import replace
@@ -18,13 +19,14 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
-from stickerpack import logo_store, pack_registry
+from stickerpack import font_store, logo_store, pack_registry
 from stickerpack.compose import add_outline, add_watermark
 from stickerpack.config import FONTS_DIR
 from stickerpack.image_utils import image_to_png_bytes, prepare_sticker_image
 from stickerpack.resizer import MAX_DIMENSION, MIN_DIMENSION, image_to_png_bytes_with_dpi, resize_to_canvas
 from stickerpack.sticker_api import DEFAULT_EMOJI, add_or_create, build_set_name, pack_link
 from stickerpack.text_sticker import TextStickerStyle, render_text_sticker
+from stickerpack.video_sticker import convert_to_video_sticker
 
 from .state import MAX_STICKERS_PER_PACK, prefs, sessions
 
@@ -84,6 +86,11 @@ FONT_CHOICES = [
     ("Klassik", "DejaVuSerif-Bold.ttf"),
     ("Mashinka", "DejaVuSansMono-Bold.ttf"),
 ]
+OUTLINE_WIDTH_CHOICES = [
+    ("Ingichka", 4),
+    ("O'rtacha", 8),
+    ("Qalin", 14),
+]
 LOGO_OUTLINE_STATES: list[tuple[str, tuple[int, int, int, int] | None]] = [
     ("O'CHIQ", None),
     ("Oq", (255, 255, 255, 255)),
@@ -111,12 +118,22 @@ def _font_path(filename: str) -> str:
     return str(FONTS_DIR / filename)
 
 
-def _font_name(font_path: str | None) -> str:
+def _font_name(font_path: str | None, user_id: int) -> str:
     resolved = font_path or _font_path(FONT_CHOICES[0][1])
     for name, filename in FONT_CHOICES:
         if _font_path(filename) == resolved:
             return name
+    for font in font_store.list_fonts(user_id):
+        if str(font.path) == resolved:
+            return f"\U0001F524 {font.name}"
     return FONT_CHOICES[0][0]
+
+
+def _outline_width_name(width: int) -> str:
+    for name, value in OUTLINE_WIDTH_CHOICES:
+        if value == width:
+            return name
+    return f"{width}px"
 
 
 def _chunk(items: list, size: int) -> list[list]:
@@ -214,7 +231,9 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await _render_mypacks(user.id, partial(_safe_edit_message_text, query))
     elif action == "style":
         style = prefs.get(user.id).style
-        await _safe_edit_message_text(query, _style_summary(style), reply_markup=_style_keyboard(style))
+        await _safe_edit_message_text(
+            query, _style_summary(style, user.id), reply_markup=_style_keyboard(style, user.id)
+        )
     elif action == "company":
         await _render_company(user.id, partial(_safe_edit_message_text, query))
     elif action == "resize":
@@ -248,8 +267,10 @@ async def newpack_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await _start_new_pack(user.id, title, bot_username)
     await update.message.reply_text(
         f"✅ '{title}' to'plami boshlandi.\n"
-        "Endi menga rasm yuboring yoki matn yozing - har biri to'plamga stiker "
-        "sifatida qo'shiladi. Tugatgach /done ni bosing.\n\n"
+        "Endi menga rasm yuboring, matn yozing yoki GIF/animatsiya yuboring - har biri "
+        "to'plamga stiker sifatida qo'shiladi (rasm/matn va GIF stikerlarini bitta "
+        "to'plamda aralashtirib bo'lmaydi - birinchi qo'shgan turingiz shu to'plamning "
+        "formatini belgilaydi). Tugatgach /done ni bosing.\n\n"
         "Xohlasangiz avval /style bilan ko'rinishni yoki /company bilan "
         "kompaniya logotipini sozlashingiz mumkin."
     )
@@ -299,18 +320,19 @@ def _text_color_name(style: TextStickerStyle) -> str:
     return _color_name(TEXT_COLOR_CHOICES, style.text_color)
 
 
-def _style_summary(style: TextStickerStyle) -> str:
+def _style_summary(style: TextStickerStyle, user_id: int) -> str:
     return (
         "\U0001F3A8 Matnli stiker stili:\n"
         f"Fon: {_color_name(BG_CHOICES, style.background_color)}\n"
         f"Matn rangi: {_text_color_name(style)}\n"
         f"Chiziq rangi: {_color_name(OUTLINE_COLOR_CHOICES, style.outline_color)}\n"
-        f"Shrift: {_font_name(style.font_path)}\n\n"
+        f"Chiziq qalinligi: {_outline_width_name(style.outline_width)}\n"
+        f"Shrift: {_font_name(style.font_path, user_id)}\n\n"
         "Tugmalar orqali o'zgartiring:"
     )
 
 
-def _style_keyboard(style: TextStickerStyle) -> InlineKeyboardMarkup:
+def _style_keyboard(style: TextStickerStyle, user_id: int) -> InlineKeyboardMarkup:
     def mark(label: str, selected: bool) -> str:
         return f"✅ {label}" if selected else label
 
@@ -336,12 +358,27 @@ def _style_keyboard(style: TextStickerStyle) -> InlineKeyboardMarkup:
         )
         for name, filename in FONT_CHOICES
     ]
+    custom_fonts = font_store.list_fonts(user_id)
+    custom_font_buttons = [
+        InlineKeyboardButton(
+            mark(f"\U0001F524 {font.name}", style.font_path == str(font.path)),
+            callback_data=f"style:customfont:{font.name}",
+        )
+        for font in custom_fonts
+    ]
     outline_buttons = [
         InlineKeyboardButton(
             mark(name, _hex_to_rgba(hex_v) == style.outline_color),
             callback_data=f"style:outline:{hex_v or 'none'}",
         )
         for name, hex_v in OUTLINE_COLOR_CHOICES
+    ]
+    width_buttons = [
+        InlineKeyboardButton(
+            mark(name, style.outline_width == width),
+            callback_data=f"style:outlinewidth:{width}",
+        )
+        for name, width in OUTLINE_WIDTH_CHOICES
     ]
 
     rows = [
@@ -350,16 +387,29 @@ def _style_keyboard(style: TextStickerStyle) -> InlineKeyboardMarkup:
         *_chunk(text_buttons, 3),
         [InlineKeyboardButton("\U0001F3A8 Boshqa matn rangi (HEX)", callback_data="style:custompick:text")],
         *_chunk(font_buttons, 2),
-        *_chunk(outline_buttons, 3),
-        [InlineKeyboardButton("\U0001F3A8 Boshqa chiziq rangi (HEX)", callback_data="style:custompick:outline")],
-        [InlineKeyboardButton("✅ Saqlash", callback_data="style:close")],
     ]
+    if custom_font_buttons:
+        rows.extend(_chunk(custom_font_buttons, 2))
+    rows.append([InlineKeyboardButton("\U0001F4E4 O'z shriftini yuklash (.ttf/.otf)", callback_data="style:uploadfont")])
+    if custom_fonts:
+        rows.append(
+            [InlineKeyboardButton("\U0001F5D1 Yuklangan shriftlarni tozalash", callback_data="style:clearfonts")]
+        )
+    rows.extend(
+        [
+            *_chunk(outline_buttons, 3),
+            [InlineKeyboardButton("\U0001F3A8 Boshqa chiziq rangi (HEX)", callback_data="style:custompick:outline")],
+            *_chunk(width_buttons, 3),
+            [InlineKeyboardButton("✅ Saqlash", callback_data="style:close")],
+        ]
+    )
     return InlineKeyboardMarkup(rows)
 
 
 async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    style = prefs.get(update.effective_user.id).style
-    await update.message.reply_text(_style_summary(style), reply_markup=_style_keyboard(style))
+    user_id = update.effective_user.id
+    style = prefs.get(user_id).style
+    await update.message.reply_text(_style_summary(style, user_id), reply_markup=_style_keyboard(style, user_id))
 
 
 async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -387,6 +437,14 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         return
 
+    if kind == "uploadfont":
+        user_prefs.awaiting_custom_font = True
+        await query.answer()
+        await _safe_edit_message_text(query,
+            "\U0001F4E4 Menga TTF yoki OTF shrift faylini fayl (hujjat) sifatida yuboring."
+        )
+        return
+
     if kind == "bg":
         user_prefs.style.background_color = None if value == "none" else _hex_to_rgba(value)
     elif kind == "text":
@@ -397,8 +455,22 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             user_prefs.style.text_color = _hex_to_rgba(value)
     elif kind == "outline":
         user_prefs.style.outline_color = None if value == "none" else _hex_to_rgba(value)
+    elif kind == "outlinewidth":
+        user_prefs.style.outline_width = int(value)
     elif kind == "font":
         user_prefs.style.font_path = _font_path(value)
+    elif kind == "customfont":
+        font = next((f for f in font_store.list_fonts(user.id) if f.name == value), None)
+        if font:
+            user_prefs.style.font_path = str(font.path)
+    elif kind == "clearfonts":
+        current_is_custom = not any(
+            _font_path(filename) == user_prefs.style.font_path for _, filename in FONT_CHOICES
+        )
+        for font in font_store.list_fonts(user.id):
+            font_store.delete_font(user.id, font.name)
+        if current_is_custom:
+            user_prefs.style.font_path = None
 
     warning = None
     if kind in ("text", "outline") and not user_prefs.style.text_gradient:
@@ -406,7 +478,36 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             warning = "⚠️ Matn va chiziq rangi bir-biriga juda yaqin — matn ko'rinmasligi mumkin!"
 
     await query.answer(warning, show_alert=bool(warning))
-    await _safe_edit_message_text(query, _style_summary(user_prefs.style), reply_markup=_style_keyboard(user_prefs.style))
+    await _safe_edit_message_text(
+        query,
+        _style_summary(user_prefs.style, user.id),
+        reply_markup=_style_keyboard(user_prefs.style, user.id),
+    )
+
+
+async def font_upload_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    user_prefs = prefs.get(user.id)
+
+    if not user_prefs.awaiting_custom_font:
+        return  # a stray .ttf/.otf sent outside the "upload font" flow - ignore it
+
+    document = update.message.document
+    tg_file = await document.get_file()
+    data = bytes(await tg_file.download_as_bytearray())
+
+    try:
+        font = font_store.save_font(user.id, document.file_name or "font.ttf", data)
+    except ValueError as exc:
+        await update.message.reply_text(f"❌ {exc}. Boshqa faylni sinab ko'ring.")
+        return
+
+    user_prefs.awaiting_custom_font = False
+    user_prefs.style.font_path = str(font.path)
+    await update.message.reply_text(
+        f"✅ '{font.name}' shrifti yuklandi va tanlandi.",
+        reply_markup=_style_keyboard(user_prefs.style, user.id),
+    )
 
 
 # --------------------------------------------------------------------------
@@ -438,7 +539,7 @@ def _company_text(user_id: int, company_mode: bool, outline_color: tuple[int, in
         + mode_line
         + outline_line
         + "\n\nYoqilgan bo'lsa, logotipingiz yangi matnli va rasmli stikerlarning "
-        "pastki qismiga kichik belgi (watermark) sifatida qo'yiladi. Logotipni "
+        "pastki o'ng qismiga kichik belgi (watermark) sifatida qo'yiladi. Logotipni "
         "PNG fayl (hujjat) sifatida yuborsangiz, shaffof fon saqlanib qoladi va "
         "kontur uning shakliga mos chiqadi."
     )
@@ -623,9 +724,18 @@ async def _resize_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE, i
 # --------------------------------------------------------------------------
 
 
+def _format_icon(sticker_format: str) -> str:
+    return "\U0001F3AC" if sticker_format == "video" else "\U0001F5BC"
+
+
 def _packs_keyboard(packs: list[pack_registry.PackRecord]) -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(f"{record.title} ({record.count})", callback_data=f"pack:open:{i}")]
+        [
+            InlineKeyboardButton(
+                f"{_format_icon(record.sticker_format)} {record.title} ({record.count})",
+                callback_data=f"pack:open:{i}",
+            )
+        ]
         for i, record in enumerate(packs)
     ]
     rows.append([InlineKeyboardButton("\U0001F3E0 Bosh menyu", callback_data="menu:help")])
@@ -678,17 +788,21 @@ async def pack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if action == "open":
         await query.answer()
+        format_label = "video/GIF" if record.sticker_format == "video" else "rasm/matn"
         await _safe_edit_message_text(query,
-            f"\U0001F4E6 {record.title}\n{record.count} ta stiker\n{pack_link(record.name)}",
+            f"{_format_icon(record.sticker_format)} {record.title}\n"
+            f"{record.count} ta stiker ({format_label})\n{pack_link(record.name)}",
             reply_markup=_pack_menu_keyboard(idx),
         )
     elif action == "continue":
         session = sessions.start(user.id, set_name=record.name, title=record.title)
         session.count = record.count
+        session.sticker_format = record.sticker_format
         prefs.get(user.id).resize_mode = False
         await query.answer()
+        next_hint = "GIF/animatsiya" if record.sticker_format == "video" else "rasm yoki matn"
         await _safe_edit_message_text(query,
-            f"✅ '{record.title}' to'plamiga davom etyapsiz. Rasm yoki matn yuboring, "
+            f"✅ '{record.title}' to'plamiga davom etyapsiz. Menga {next_hint} yuboring, "
             "tugatgach /done bosing."
         )
     elif action == "rename":
@@ -771,6 +885,13 @@ async def _handle_incoming_image(update: Update, context: ContextTypes.DEFAULT_T
             "Avval yangi to'plam boshlang: /newpack nomi yoki /start dagi \U0001F195 tugmasi orqali."
         )
         return
+    if session.sticker_format == "video":
+        await update.message.reply_text(
+            "Bu to'plam video/GIF stikerlar uchun boshlangan — Telegram bitta to'plamda "
+            "statik va video stikerlarni aralashtirishga ruxsat bermaydi. Rasm/matn "
+            "stikerlari uchun /newpack bilan alohida yangi to'plam boshlang."
+        )
+        return
     if session.count >= MAX_STICKERS_PER_PACK:
         await update.message.reply_text(
             f"Bu to'plamda allaqachon {MAX_STICKERS_PER_PACK} ta stiker bor (Telegram "
@@ -789,8 +910,9 @@ async def _handle_incoming_image(update: Update, context: ContextTypes.DEFAULT_T
             user_id=user.id,
             set_name=session.set_name,
             title=session.title,
-            png_bytes=png_bytes,
+            media_bytes=png_bytes,
             emoji=emoji,
+            sticker_format="static",
         )
     except (BadRequest, TelegramError) as exc:
         logger.warning("Sticker add failed: %s", exc)
@@ -801,10 +923,93 @@ async def _handle_incoming_image(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text("Kutilmagan xatolik yuz berdi, qayta urinib ko'ring.")
         return
 
+    session.sticker_format = "static"
     sessions.bump(user.id)
-    pack_registry.upsert_pack(user.id, session.set_name, session.title, session.count)
+    pack_registry.upsert_pack(user.id, session.set_name, session.title, session.count, sticker_format="static")
     await update.message.reply_text(
         f"➕ Qo'shildi ({session.count}/{MAX_STICKERS_PER_PACK}). Davom eting yoki /done bosing."
+    )
+
+
+# --------------------------------------------------------------------------
+# GIF / animation -> video sticker
+# --------------------------------------------------------------------------
+
+
+async def gif_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    user_prefs = prefs.get(user.id)
+
+    if user_prefs.awaiting_logo:
+        await update.message.reply_text(
+            "Kompaniya logotipi statik rasm (PNG/JPG) bo'lishi kerak, GIF/animatsiya emas. "
+            "Iltimos, logotipni oddiy rasm yoki fayl qilib qayta yuboring."
+        )
+        return
+
+    session = sessions.get(user.id)
+    if session is None:
+        await update.message.reply_text(
+            "Avval yangi to'plam boshlang: /newpack nomi yoki /start dagi \U0001F195 tugmasi orqali."
+        )
+        return
+    if session.sticker_format == "static":
+        await update.message.reply_text(
+            "Bu to'plam rasm/matn stikerlar uchun boshlangan — Telegram bitta to'plamda "
+            "statik va video stikerlarni aralashtirishga ruxsat bermaydi. GIF stikerlar "
+            "uchun /newpack bilan alohida yangi to'plam boshlang."
+        )
+        return
+    if session.count >= MAX_STICKERS_PER_PACK:
+        await update.message.reply_text(
+            f"Bu to'plamda allaqachon {MAX_STICKERS_PER_PACK} ta stiker bor (Telegram "
+            "chegarasi). /done bilan yakunlang va yangi to'plam boshlang."
+        )
+        return
+
+    media = update.message.animation or update.message.document
+    tg_file = await media.get_file()
+    source_bytes = bytes(await tg_file.download_as_bytearray())
+
+    emoji = extract_emoji(update.message.caption) or DEFAULT_EMOJI
+    status_message = await update.message.reply_text(
+        "\U0001F504 GIF video-stikerga o'girilmoqda, biroz kuting..."
+    )
+
+    try:
+        webm_bytes = await asyncio.to_thread(convert_to_video_sticker, source_bytes)
+    except Exception:
+        logger.exception("Unexpected error while converting GIF to a video sticker")
+        await status_message.edit_text(
+            "GIFni video-stikerga o'girishda xatolik yuz berdi (juda uzun yoki formatida "
+            "muammo bo'lishi mumkin). Boshqa GIF bilan urinib ko'ring."
+        )
+        return
+
+    try:
+        await add_or_create(
+            context.bot,
+            user_id=user.id,
+            set_name=session.set_name,
+            title=session.title,
+            media_bytes=webm_bytes,
+            emoji=emoji,
+            sticker_format="video",
+        )
+    except (BadRequest, TelegramError) as exc:
+        logger.warning("Video sticker add failed: %s", exc)
+        await status_message.edit_text(f"Xatolik yuz berdi: {exc.message}")
+        return
+    except Exception:
+        logger.exception("Unexpected error while adding video sticker")
+        await status_message.edit_text("Kutilmagan xatolik yuz berdi, qayta urinib ko'ring.")
+        return
+
+    session.sticker_format = "video"
+    sessions.bump(user.id)
+    pack_registry.upsert_pack(user.id, session.set_name, session.title, session.count, sticker_format="video")
+    await status_message.edit_text(
+        f"➕ Video-stiker qo'shildi ({session.count}/{MAX_STICKERS_PER_PACK}). Davom eting yoki /done bosing."
     )
 
 
@@ -837,8 +1042,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await _start_new_pack(user.id, text, bot_username)
         await update.message.reply_text(
             f"✅ '{text}' to'plami boshlandi.\n"
-            "Endi menga rasm yuboring yoki matn yozing - har biri to'plamga stiker "
-            "sifatida qo'shiladi. Tugatgach /done ni bosing."
+            "Endi menga rasm, matn yoki GIF/animatsiya yuboring - har biri to'plamga "
+            "stiker sifatida qo'shiladi (rasm/matn va GIF stikerlarini bitta to'plamda "
+            "aralashtirib bo'lmaydi). Tugatgach /done ni bosing."
         )
         return
 
@@ -875,14 +1081,14 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             user_prefs.style.text_gradient = None
             user_prefs.style.text_color = color
 
-        summary = _style_summary(user_prefs.style)
+        summary = _style_summary(user_prefs.style, user.id)
         if (
             target in ("text", "outline")
             and not user_prefs.style.text_gradient
             and _colors_clash(user_prefs.style.text_color, user_prefs.style.outline_color)
         ):
             summary = "⚠️ Matn va chiziq rangi bir-biriga juda yaqin — matn ko'rinmasligi mumkin!\n\n" + summary
-        await update.message.reply_text(summary, reply_markup=_style_keyboard(user_prefs.style))
+        await update.message.reply_text(summary, reply_markup=_style_keyboard(user_prefs.style, user.id))
         return
 
     if user_prefs.awaiting_rename_for:
@@ -924,6 +1130,13 @@ async def _add_text_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if session is None:
         await update.message.reply_text("Avval /newpack nomi bilan to'plam boshlang.")
         return
+    if session.sticker_format == "video":
+        await update.message.reply_text(
+            "Bu to'plam video/GIF stikerlar uchun boshlangan — Telegram bitta to'plamda "
+            "statik va video stikerlarni aralashtirishga ruxsat bermaydi. Matnli stikerlar "
+            "uchun /newpack bilan alohida yangi to'plam boshlang."
+        )
+        return
     if session.count >= MAX_STICKERS_PER_PACK:
         await update.message.reply_text(
             f"Bu to'plamda allaqachon {MAX_STICKERS_PER_PACK} ta stiker bor. /done bilan yakunlang."
@@ -948,8 +1161,9 @@ async def _add_text_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             user_id=user.id,
             set_name=session.set_name,
             title=session.title,
-            png_bytes=png_bytes,
+            media_bytes=png_bytes,
             emoji=emoji,
+            sticker_format="static",
         )
     except (BadRequest, TelegramError) as exc:
         logger.warning("Sticker add failed: %s", exc)
@@ -960,8 +1174,9 @@ async def _add_text_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         await update.message.reply_text("Kutilmagan xatolik yuz berdi, qayta urinib ko'ring.")
         return
 
+    session.sticker_format = "static"
     sessions.bump(user.id)
-    pack_registry.upsert_pack(user.id, session.set_name, session.title, session.count)
+    pack_registry.upsert_pack(user.id, session.set_name, session.title, session.count, sticker_format="static")
     await update.message.reply_text(
         f"➕ Qo'shildi ({session.count}/{MAX_STICKERS_PER_PACK}). Davom eting yoki /done bosing."
     )

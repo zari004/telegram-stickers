@@ -53,11 +53,23 @@ shart emas.
   stil sozlamalari bilan)
 - `/addtext Salom! | 😀` — matndan stiker yasaydi, `|` dan keyin emoji
   ko'rsatish ixtiyoriy
+- GIF yoki animatsiya yuboring — 🎬 **video-stiker** sifatida qo'shadi
+  (Telegram video-stiker talablariga mos WEBM/VP9 formatga avtomatik
+  o'giradi: uzunligi 3 soniyagacha qisqartiriladi, o'lchami 512px ga
+  moslashtiriladi, hajmi 256KB dan oshmasligi uchun sifat avtomatik
+  pasaytiriladi). **Muhim**: Telegram bitta stiker to'plamida statik
+  (rasm/matn) va video stikerlarni aralashtirishga ruxsat bermaydi — bir
+  to'plamga qo'shgan birinchi stiker turi o'sha to'plamning formatini
+  belgilaydi; boshqa turdagi stiker uchun `/newpack` bilan alohida
+  to'plam boshlash kerak. Bepul Render instansida video konvertatsiya
+  protsessor kuchi cheklangani sabab bir necha o'n soniya davom etishi
+  mumkin — shoshilmang, "GIF video-stikerga o'girilmoqda..." xabari
+  chiqqach kuting.
 - `/done` — to'plamni yakunlaydi va `t.me/addstickers/...` havolasini beradi
 - `/cancel` — joriy to'plam yaratishni bekor qiladi
 
 **Stil sozlash** (`/style` yoki menyudagi 🎨 tugma): fon rangi, matn
-rangi, chiziq (outline) rangi (yoki o'chirish) va shrift (qalin/oddiy) —
+rangi, chiziq (outline) rangi va qalinligi (yoki o'chirish) va shrift —
 barchasi tugmalar bilan tanlanadi (fon, matn va chiziq uchun HEX kod
 kiritish orqali istalgan boshqa rangni ham tanlash mumkin), tanlov
 saqlanadi va shu foydalanuvchining barcha keyingi matnli stikerlarida
@@ -65,10 +77,17 @@ qo'llanadi. Matn rangi ro'yxatining eng boshida 💚 **Yashil gradient**
 varianti ham bor — matn chapdan o'ngga to'q yashildan yorqin yashilga
 o'tuvchi gradient rangda chiqadi.
 
+**O'z shriftingizni yuklash**: tayyor 4 ta shrift (Qalin/Oddiy/Klassik/
+Mashinka) yetarli bo'lmasa, "📤 O'z shriftini yuklash" tugmasini bosib,
+kompyuteringizdan TTF yoki OTF shrift faylini fayl (hujjat) sifatida
+yuboring — u tekshirilib saqlanadi va darhol tanlanadi, keyinchalik ham
+ro'yxatda 🔤 belgisi bilan qayta tanlash uchun turadi ("🗑 Yuklangan
+shriftlarni tozalash" tugmasi bilan hammasini o'chirish mumkin).
+
 **Kompaniya logotipi** (`/company` yoki menyudagi 🏢 tugma):
 logotipingizni bir marta rasm qilib yuboring — u saqlanadi va "Kompaniya
 rejimi" yoqilganda keyingi barcha stikerlarning (matnli va rasmli)
-pastki qismiga kichik belgi (watermark) sifatida qo'yiladi — sticker
+pastki o'ng qismiga kichik belgi (watermark) sifatida qo'yiladi — sticker
 tarkibi to'liq ko'rinib turadi, logotip esa kichik va chiroyli holda
 pastda joylashadi. Tugmalar orqali istalgan payt yoqib/o'chirish,
 logotipni almashtirish/o'chirish, yoki logotip atrofiga kontur
@@ -78,7 +97,8 @@ qo'shish mumkin.
 o'zi yaratgan barcha to'plamlaringizni ro'yxat qilib ko'rsatadi (Telegram
 API "mening barcha to'plamlarim" degan so'rovni qo'llab-quvvatlamaydi,
 shuning uchun bot buni o'zi eslab qoladi — quyidagi "Eslatmalar" bo'limiga
-qarang). Har bir to'plamni tanlab:
+qarang; ro'yxatda har bir to'plam formati 🖼 rasm/matn yoki 🎬 video/GIF
+belgisi bilan ko'rsatiladi). Har bir to'plamni tanlab:
 - ➕ davom qo'shish (yopilgan to'plamga yana stiker qo'shish)
 - ✏️ nomini o'zgartirish
 - 🗑 butunlay o'chirish (Telegram'dagi to'plamning o'zi ham o'chadi)
@@ -206,10 +226,12 @@ stickerpack/        - qayta ishlatiladigan yadro (bot va skriptlar ishlatadi)
   logo_store.py      - har bir foydalanuvchining kompaniya logotipini saqlaydi
   pack_registry.py   - foydalanuvchi yaratgan to'plamlar ro'yxatini saqlaydi
   resizer.py         - istalgan rasmni belgilangan px o'lcham + dpi bilan qayta hajmga keltiradi
+  video_sticker.py   - GIF/animatsiyani Telegram video-stiker (WEBM/VP9) formatiga o'giradi
+  font_store.py      - har bir foydalanuvchi yuklagan shaxsiy shriftlarni saqlaydi
   config.py          - .env / BOT_TOKEN o'qish
 bot/                 - interaktiv Telegram bot
   main.py, handlers.py, state.py
-data/                - ishga tushirilganda avtomatik yaratiladi (logotiplar, to'plamlar ro'yxati)
+data/                - ishga tushirilganda avtomatik yaratiladi (logotiplar, shriftlar, to'plamlar ro'yxati)
 scripts/
   upload_pack.py             - papkadagi rasmlarni to'plam qilib yuklash
   generate_text_stickers.py  - matndan stiker rasmlari generatsiya qilish
@@ -222,15 +244,19 @@ Procfile             - hosting xizmatlari uchun ishga tushirish buyrug'i
 - Statik stiker rasmi PNG bo'lishi va bir tomoni aniq 512px, ikkinchisi esa
   512px dan katta bo'lmasligi kerak — `image_utils.prepare_sticker_image`
   buni avtomatik ta'minlaydi.
-- Bitta stiker to'plamida Telegram bo'yicha eng ko'pi bilan 120 ta statik
-  stiker bo'lishi mumkin; bot bu chegarani nazorat qiladi.
-- Animatsion (TGS/WEBM) stikerlar bu loyihada qo'llab-quvvatlanmaydi —
-  faqat statik PNG stikerlar bilan ishlaydi.
-- Stil sozlamalari, kompaniya logotipi va "Mening to'plamlarim" ro'yxati
-  `data/` papkasida (xotirada emas, diskda) saqlanadi. **Bepul Render
-  rejasida doimiy disk yo'q** — shuning uchun bot qayta ishga tushganda
-  (redeploy yoki uzoq vaqt uxlab, qayta uyg'ongandan keyin) bu ma'lumotlar
-  o'chib ketishi mumkin va foydalanuvchilar logotipni qayta yuklashga
-  to'g'ri kelishi mumkin. To'liq doimiy saqlash kerak bo'lsa, Render'da
+- Bitta stiker to'plamida Telegram bo'yicha eng ko'pi bilan 120 ta stiker
+  (statik yoki video) bo'lishi mumkin; bot bu chegarani nazorat qiladi.
+- GIF/animatsiyalardan avtomatik yasaladigan video-stikerlar (WEBM/VP9)
+  qo'llab-quvvatlanadi; Lottie-animatsiya (TGS) formatidagi stikerlar esa
+  qo'llab-quvvatlanmaydi. Bitta to'plamda statik va video stikerlarni
+  aralashtirib bo'lmaydi (Telegram cheklovi) — yuqoridagi "To'plam
+  yaratish" bo'limiga qarang.
+- Stil sozlamalari, kompaniya logotipi, yuklangan shaxsiy shriftlar va
+  "Mening to'plamlarim" ro'yxati `data/` papkasida (xotirada emas,
+  diskda) saqlanadi. **Bepul Render rejasida doimiy disk yo'q** —
+  shuning uchun bot qayta ishga tushganda (redeploy yoki uzoq vaqt
+  uxlab, qayta uyg'ongandan keyin) bu ma'lumotlar o'chib ketishi mumkin
+  va foydalanuvchilar logotip/shriftni qayta yuklashga to'g'ri kelishi
+  mumkin. To'liq doimiy saqlash kerak bo'lsa, Render'da
   pullik "Persistent Disk" ulash yoki tashqi bazaga (masalan Postgres)
   o'tkazish kerak bo'ladi.
