@@ -57,7 +57,13 @@ BG_CHOICES = [
     ("Pushti", "EB5757"),
     ("Qora", "1E1E1E"),
 ]
+GRADIENT_TEXT_KEY = "GRADIENT_GREEN"
+GREEN_GRADIENT: tuple[tuple[int, int, int, int], tuple[int, int, int, int]] = (
+    (17, 153, 142, 255),
+    (56, 239, 125, 255),
+)
 TEXT_COLOR_CHOICES = [
+    ("\U0001F49A Yashil gradient", GRADIENT_TEXT_KEY),
     ("Qora", "1E1E1E"),
     ("Oq", "FFFFFF"),
     ("Sariq", "FFD600"),
@@ -263,9 +269,17 @@ async def done_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 def _color_name(choices: list[tuple[str, str | None]], color: tuple | None) -> str:
     for name, hex_value in choices:
+        if hex_value == GRADIENT_TEXT_KEY:
+            continue
         if _hex_to_rgba(hex_value) == color:
             return name
     return "-"
+
+
+def _text_color_name(style: TextStickerStyle) -> str:
+    if style.text_gradient:
+        return TEXT_COLOR_CHOICES[0][0]
+    return _color_name(TEXT_COLOR_CHOICES, style.text_color)
 
 
 def _style_summary(style: TextStickerStyle) -> str:
@@ -273,7 +287,7 @@ def _style_summary(style: TextStickerStyle) -> str:
     return (
         "\U0001F3A8 Matnli stiker stili:\n"
         f"Fon: {_color_name(BG_CHOICES, style.background_color)}\n"
-        f"Matn rangi: {_color_name(TEXT_COLOR_CHOICES, style.text_color)}\n"
+        f"Matn rangi: {_text_color_name(style)}\n"
         f"Chiziq: {outline_label}\n"
         f"Shrift: {_font_name(style.font_path)}\n\n"
         "Tugmalar orqali o'zgartiring:"
@@ -291,13 +305,13 @@ def _style_keyboard(style: TextStickerStyle) -> InlineKeyboardMarkup:
         )
         for name, hex_v in BG_CHOICES
     ]
-    text_buttons = [
-        InlineKeyboardButton(
-            mark(name, _hex_to_rgba(hex_v) == style.text_color),
-            callback_data=f"style:text:{hex_v}",
-        )
-        for name, hex_v in TEXT_COLOR_CHOICES
-    ]
+    text_buttons = []
+    for name, hex_v in TEXT_COLOR_CHOICES:
+        if hex_v == GRADIENT_TEXT_KEY:
+            selected = style.text_gradient is not None
+        else:
+            selected = style.text_gradient is None and _hex_to_rgba(hex_v) == style.text_color
+        text_buttons.append(InlineKeyboardButton(mark(name, selected), callback_data=f"style:text:{hex_v}"))
     current_font = style.font_path or _font_path(FONT_CHOICES[0][1])
     font_buttons = [
         InlineKeyboardButton(
@@ -353,7 +367,11 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if kind == "bg":
         user_prefs.style.background_color = None if value == "none" else _hex_to_rgba(value)
     elif kind == "text":
-        user_prefs.style.text_color = _hex_to_rgba(value)
+        if value == GRADIENT_TEXT_KEY:
+            user_prefs.style.text_gradient = GREEN_GRADIENT
+        else:
+            user_prefs.style.text_gradient = None
+            user_prefs.style.text_color = _hex_to_rgba(value)
     elif kind == "outline":
         user_prefs.style.outline_color = None if user_prefs.style.outline_color else (255, 255, 255, 255)
     elif kind == "font":
@@ -824,6 +842,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if target == "bg":
             user_prefs.style.background_color = color
         else:
+            user_prefs.style.text_gradient = None
             user_prefs.style.text_color = color
         await update.message.reply_text(
             _style_summary(user_prefs.style), reply_markup=_style_keyboard(user_prefs.style)

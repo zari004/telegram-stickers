@@ -59,7 +59,9 @@ shart emas.
 **Stil sozlash** (`/style` yoki menyudagi 🎨 tugma): fon rangi, matn
 rangi, chiziq (outline) yoniq/o'chiq va shrift (qalin/oddiy) — barchasi
 tugmalar bilan tanlanadi, tanlov saqlanadi va shu foydalanuvchining barcha
-keyingi matnli stikerlarida qo'llanadi.
+keyingi matnli stikerlarida qo'llanadi. Matn rangi ro'yxatining eng
+boshida 💚 **Yashil gradient** varianti ham bor — matn chapdan o'ngga
+to'q yashildan yorqin yashilga o'tuvchi gradient rangda chiqadi.
 
 **Kompaniya logotipi** (`/company` yoki menyudagi 🏢 tugma):
 logotipingizni bir marta rasm qilib yuboring — u saqlanadi va "Kompaniya
