@@ -19,30 +19,33 @@ def fit_to_canvas(image: Image.Image, size: int = STICKER_SIZE) -> Image.Image:
     return canvas
 
 
-def layer_over_background(
-    foreground: Image.Image,
-    background: Image.Image,
+def add_watermark(
+    base: Image.Image,
+    logo: Image.Image,
     *,
-    foreground_scale: float = 1.0,
+    scale: float = 0.22,
+    margin: int = 22,
 ) -> Image.Image:
-    """Composite ``foreground`` centered on top of ``background``.
+    """Paste ``logo`` small and bottom-centered on top of ``base``, as a watermark.
 
-    Both images are fit to the sticker canvas first. ``foreground_scale``
-    (0-1] shrinks the foreground so some of the background peeks out around
-    the edges, which matters for opaque foregrounds like photos - a plain
-    text sticker (transparent background) shows the logo through its own
-    gaps and rarely needs shrinking.
+    ``scale`` caps the logo's longest side at that fraction of the canvas
+    (e.g. 0.22 = at most 22% of the sticker's width/height), so it reads as
+    a small badge rather than taking over the sticker.
     """
-    canvas = fit_to_canvas(background)
-    fg = fit_to_canvas(foreground)
+    base = fit_to_canvas(base)
+    logo = logo.convert("RGBA")
 
-    if foreground_scale < 1.0:
-        new_size = tuple(max(1, round(dim * foreground_scale)) for dim in fg.size)
-        fg = fg.resize(new_size, Image.LANCZOS)
+    target = max(1, round(base.width * scale))
+    logo_scale = target / max(logo.size)
+    new_size = (max(1, round(logo.width * logo_scale)), max(1, round(logo.height * logo_scale)))
+    logo_resized = logo.resize(new_size, Image.LANCZOS)
 
-    offset = ((canvas.width - fg.width) // 2, (canvas.height - fg.height) // 2)
-    canvas.paste(fg, offset, fg)
-    return canvas
+    x = (base.width - logo_resized.width) // 2
+    y = base.height - logo_resized.height - margin
+
+    result = base.copy()
+    result.alpha_composite(logo_resized, (x, y))
+    return result
 
 
 def add_outline(

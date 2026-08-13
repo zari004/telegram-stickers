@@ -59,16 +59,18 @@ shart emas.
 **Stil sozlash** (`/style` yoki menyudagi 🎨 tugma): fon rangi, matn
 rangi, chiziq (outline) yoniq/o'chiq va shrift (qalin/oddiy) — barchasi
 tugmalar bilan tanlanadi, tanlov saqlanadi va shu foydalanuvchining barcha
-keyingi matnli stikerlarida qo'llanadi.
+keyingi matnli stikerlarida qo'llanadi. Matn rangi ro'yxatining eng
+boshida 💚 **Yashil gradient** varianti ham bor — matn chapdan o'ngga
+to'q yashildan yorqin yashilga o'tuvchi gradient rangda chiqadi.
 
 **Kompaniya logotipi** (`/company` yoki menyudagi 🏢 tugma):
 logotipingizni bir marta rasm qilib yuboring — u saqlanadi va "Kompaniya
 rejimi" yoqilganda keyingi barcha stikerlarning (matnli va rasmli)
-orqa foniga avtomatik qo'yiladi. Matnli stikerlarda fon shaffof bo'lib
-qoladi (logotip aniq ko'rinishi uchun), rasmli stikerlarda esa rasm
-biroz kichraytirilib, atrofidan logotip "ramka" bo'lib ko'rinadi.
-Tugmalar orqali istalgan payt yoqib/o'chirib yoki logotipni
-almashtirib/o'chirib turish mumkin.
+pastki qismiga kichik belgi (watermark) sifatida qo'yiladi — sticker
+tarkibi to'liq ko'rinib turadi, logotip esa kichik va chiroyli holda
+pastda joylashadi. Tugmalar orqali istalgan payt yoqib/o'chirish,
+logotipni almashtirish/o'chirish, yoki logotip atrofiga kontur
+qo'shish mumkin.
 
 **Mening to'plamlarim** (`/mypacks` yoki menyudagi 📦 tugma): bot
 o'zi yaratgan barcha to'plamlaringizni ro'yxat qilib ko'rsatadi (Telegram

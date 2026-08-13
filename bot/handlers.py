@@ -19,7 +19,7 @@ from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
 from stickerpack import logo_store, pack_registry
-from stickerpack.compose import add_outline, layer_over_background
+from stickerpack.compose import add_outline, add_watermark
 from stickerpack.config import FONTS_DIR
 from stickerpack.image_utils import image_to_png_bytes, prepare_sticker_image
 from stickerpack.resizer import MAX_DIMENSION, MIN_DIMENSION, image_to_png_bytes_with_dpi, resize_to_canvas
@@ -57,7 +57,13 @@ BG_CHOICES = [
     ("Pushti", "EB5757"),
     ("Qora", "1E1E1E"),
 ]
+GRADIENT_TEXT_KEY = "GRADIENT_GREEN"
+GREEN_GRADIENT: tuple[tuple[int, int, int, int], tuple[int, int, int, int]] = (
+    (17, 153, 142, 255),
+    (56, 239, 125, 255),
+)
 TEXT_COLOR_CHOICES = [
+    ("\U0001F49A Yashil gradient", GRADIENT_TEXT_KEY),
     ("Qora", "1E1E1E"),
     ("Oq", "FFFFFF"),
     ("Sariq", "FFD600"),
@@ -76,8 +82,6 @@ LOGO_OUTLINE_STATES: list[tuple[str, tuple[int, int, int, int] | None]] = [
     ("Qora", (30, 30, 30, 255)),
 ]
 LOGO_OUTLINE_WIDTH = 14
-
-COMPANY_PHOTO_SCALE = 0.82  # shrink uploaded photos so the logo frames them
 
 # (label, width, height, dpi_or_None) - dpi=None leaves the user's current DPI untouched
 RESIZE_PRESETS: list[tuple[str, int, int, int | None]] = [
@@ -265,9 +269,17 @@ async def done_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 def _color_name(choices: list[tuple[str, str | None]], color: tuple | None) -> str:
     for name, hex_value in choices:
+        if hex_value == GRADIENT_TEXT_KEY:
+            continue
         if _hex_to_rgba(hex_value) == color:
             return name
     return "-"
+
+
+def _text_color_name(style: TextStickerStyle) -> str:
+    if style.text_gradient:
+        return TEXT_COLOR_CHOICES[0][0]
+    return _color_name(TEXT_COLOR_CHOICES, style.text_color)
 
 
 def _style_summary(style: TextStickerStyle) -> str:
@@ -275,7 +287,7 @@ def _style_summary(style: TextStickerStyle) -> str:
     return (
         "\U0001F3A8 Matnli stiker stili:\n"
         f"Fon: {_color_name(BG_CHOICES, style.background_color)}\n"
-        f"Matn rangi: {_color_name(TEXT_COLOR_CHOICES, style.text_color)}\n"
+        f"Matn rangi: {_text_color_name(style)}\n"
         f"Chiziq: {outline_label}\n"
         f"Shrift: {_font_name(style.font_path)}\n\n"
         "Tugmalar orqali o'zgartiring:"
@@ -293,13 +305,13 @@ def _style_keyboard(style: TextStickerStyle) -> InlineKeyboardMarkup:
         )
         for name, hex_v in BG_CHOICES
     ]
-    text_buttons = [
-        InlineKeyboardButton(
-            mark(name, _hex_to_rgba(hex_v) == style.text_color),
-            callback_data=f"style:text:{hex_v}",
-        )
-        for name, hex_v in TEXT_COLOR_CHOICES
-    ]
+    text_buttons = []
+    for name, hex_v in TEXT_COLOR_CHOICES:
+        if hex_v == GRADIENT_TEXT_KEY:
+            selected = style.text_gradient is not None
+        else:
+            selected = style.text_gradient is None and _hex_to_rgba(hex_v) == style.text_color
+        text_buttons.append(InlineKeyboardButton(mark(name, selected), callback_data=f"style:text:{hex_v}"))
     current_font = style.font_path or _font_path(FONT_CHOICES[0][1])
     font_buttons = [
         InlineKeyboardButton(
@@ -355,7 +367,11 @@ async def style_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if kind == "bg":
         user_prefs.style.background_color = None if value == "none" else _hex_to_rgba(value)
     elif kind == "text":
-        user_prefs.style.text_color = _hex_to_rgba(value)
+        if value == GRADIENT_TEXT_KEY:
+            user_prefs.style.text_gradient = GREEN_GRADIENT
+        else:
+            user_prefs.style.text_gradient = None
+            user_prefs.style.text_color = _hex_to_rgba(value)
     elif kind == "outline":
         user_prefs.style.outline_color = None if user_prefs.style.outline_color else (255, 255, 255, 255)
     elif kind == "font":
@@ -394,8 +410,9 @@ def _company_text(user_id: int, company_mode: bool, outline_color: tuple[int, in
         + mode_line
         + outline_line
         + "\n\nYoqilgan bo'lsa, logotipingiz yangi matnli va rasmli stikerlarning "
-        "orqa foniga avtomatik qo'yiladi. Logotipni PNG fayl (hujjat) sifatida "
-        "yuborsangiz, shaffof fon saqlanib qoladi va kontur uning shakliga mos chiqadi."
+        "pastki qismiga kichik belgi (watermark) sifatida qo'yiladi. Logotipni "
+        "PNG fayl (hujjat) sifatida yuborsangiz, shaffof fon saqlanib qoladi va "
+        "kontur uning shakliga mos chiqadi."
     )
 
 
@@ -472,7 +489,7 @@ async def company_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
 
-def _apply_company_overlay(user_id: int, image: Image.Image, *, is_photo: bool) -> Image.Image:
+def _apply_company_overlay(user_id: int, image: Image.Image) -> Image.Image:
     user_prefs = prefs.get(user_id)
     if not user_prefs.company_mode:
         return image
@@ -481,8 +498,7 @@ def _apply_company_overlay(user_id: int, image: Image.Image, *, is_photo: bool) 
         return image
     if user_prefs.logo_outline_color:
         logo = add_outline(logo, color=user_prefs.logo_outline_color, width=LOGO_OUTLINE_WIDTH)
-    scale = COMPANY_PHOTO_SCALE if is_photo else 1.0
-    return layer_over_background(image, logo, foreground_scale=scale)
+    return add_watermark(image, logo)
 
 
 # --------------------------------------------------------------------------
@@ -738,7 +754,7 @@ async def _handle_incoming_image(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         image = prepare_sticker_image(image_bytes)
-        image = _apply_company_overlay(user.id, image, is_photo=True)
+        image = _apply_company_overlay(user.id, image)
         png_bytes = image_to_png_bytes(image)
         await add_or_create(
             context.bot,
@@ -826,6 +842,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if target == "bg":
             user_prefs.style.background_color = color
         else:
+            user_prefs.style.text_gradient = None
             user_prefs.style.text_color = color
         await update.message.reply_text(
             _style_summary(user_prefs.style), reply_markup=_style_keyboard(user_prefs.style)
@@ -888,7 +905,7 @@ async def _add_text_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
     try:
         image = render_text_sticker(text, style)
-        image = _apply_company_overlay(user.id, image, is_photo=False)
+        image = _apply_company_overlay(user.id, image)
         png_bytes = image_to_png_bytes(image)
         await add_or_create(
             context.bot,

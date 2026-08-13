@@ -21,6 +21,7 @@ FONT_STEP = 4
 @dataclass
 class TextStickerStyle:
     text_color: Color = (30, 30, 30, 255)
+    text_gradient: Optional[Tuple[Color, Color]] = None  # (left, right); overrides text_color when set
     outline_color: Optional[Color] = (255, 255, 255, 255)
     outline_width: int = 8
     background_color: Optional[Color] = None  # None => transparent background
@@ -52,20 +53,79 @@ def render_text_sticker(text: str, style: Optional[TextStickerStyle] = None) -> 
     y = (size - total_text_height) / 2
 
     stroke_width = style.outline_width if style.outline_color else 0
-    for line in lines:
-        line_width = draw.textlength(line, font=font)
-        x = (size - line_width) / 2
-        draw.text(
-            (x, y),
-            line,
-            font=font,
-            fill=style.text_color,
-            stroke_width=stroke_width,
-            stroke_fill=style.outline_color,
-        )
-        y += line_height
+
+    if style.text_gradient:
+        _draw_gradient_text(image, draw, lines, font, y, line_height, stroke_width, style)
+    else:
+        for line in lines:
+            line_width = draw.textlength(line, font=font)
+            x = (size - line_width) / 2
+            draw.text(
+                (x, y),
+                line,
+                font=font,
+                fill=style.text_color,
+                stroke_width=stroke_width,
+                stroke_fill=style.outline_color,
+            )
+            y += line_height
 
     return image
+
+
+def _draw_gradient_text(
+    image: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    lines: list[str],
+    font: ImageFont.FreeTypeFont,
+    start_y: float,
+    line_height: float,
+    stroke_width: int,
+    style: TextStickerStyle,
+) -> None:
+    """Fill the glyph interiors with a left-to-right gradient, keeping any
+    outline solid - draw.text() only accepts a single flat fill color, so
+    the gradient is painted separately and cut to the glyphs' shape via a
+    mask."""
+    size = image.size[0]
+
+    if stroke_width and style.outline_color:
+        outline_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        outline_draw = ImageDraw.Draw(outline_layer)
+        y = start_y
+        for line in lines:
+            x = (size - draw.textlength(line, font=font)) / 2
+            outline_draw.text(
+                (x, y), line, font=font, fill=style.outline_color,
+                stroke_width=stroke_width, stroke_fill=style.outline_color,
+            )
+            y += line_height
+        image.alpha_composite(outline_layer)
+
+    fill_mask = Image.new("L", image.size, 0)
+    mask_draw = ImageDraw.Draw(fill_mask)
+    y = start_y
+    for line in lines:
+        x = (size - draw.textlength(line, font=font)) / 2
+        mask_draw.text((x, y), line, font=font, fill=255)
+        y += line_height
+
+    gradient = _horizontal_gradient(image.size, *style.text_gradient)
+    gradient_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    gradient_layer.paste(gradient, (0, 0), fill_mask)
+    image.alpha_composite(gradient_layer)
+
+
+def _horizontal_gradient(size: Tuple[int, int], left: Color, right: Color) -> Image.Image:
+    width, height = size
+    row = Image.new("RGBA", (max(1, width), 1))
+    for x in range(width):
+        t = x / max(1, width - 1)
+        row.putpixel(
+            (x, 0),
+            tuple(round(left[i] + (right[i] - left[i]) * t) for i in range(4)),
+        )
+    return row.resize((width, height))
 
 
 def _fit_text(draw: ImageDraw.ImageDraw, text: str, font_path: str, max_width: float, max_height: float):
