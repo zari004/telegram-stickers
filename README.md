@@ -69,13 +69,20 @@ shart emas.
 - `/cancel` — joriy to'plam yaratishni bekor qiladi
 
 **Stil sozlash** (`/style` yoki menyudagi 🎨 tugma): fon rangi, matn
-rangi, chiziq (outline) rangi (yoki o'chirish) va shrift (qalin/oddiy) —
+rangi, chiziq (outline) rangi va qalinligi (yoki o'chirish) va shrift —
 barchasi tugmalar bilan tanlanadi (fon, matn va chiziq uchun HEX kod
 kiritish orqali istalgan boshqa rangni ham tanlash mumkin), tanlov
 saqlanadi va shu foydalanuvchining barcha keyingi matnli stikerlarida
 qo'llanadi. Matn rangi ro'yxatining eng boshida 💚 **Yashil gradient**
 varianti ham bor — matn chapdan o'ngga to'q yashildan yorqin yashilga
 o'tuvchi gradient rangda chiqadi.
+
+**O'z shriftingizni yuklash**: tayyor 4 ta shrift (Qalin/Oddiy/Klassik/
+Mashinka) yetarli bo'lmasa, "📤 O'z shriftini yuklash" tugmasini bosib,
+kompyuteringizdan TTF yoki OTF shrift faylini fayl (hujjat) sifatida
+yuboring — u tekshirilib saqlanadi va darhol tanlanadi, keyinchalik ham
+ro'yxatda 🔤 belgisi bilan qayta tanlash uchun turadi ("🗑 Yuklangan
+shriftlarni tozalash" tugmasi bilan hammasini o'chirish mumkin).
 
 **Kompaniya logotipi** (`/company` yoki menyudagi 🏢 tugma):
 logotipingizni bir marta rasm qilib yuboring — u saqlanadi va "Kompaniya
@@ -220,10 +227,11 @@ stickerpack/        - qayta ishlatiladigan yadro (bot va skriptlar ishlatadi)
   pack_registry.py   - foydalanuvchi yaratgan to'plamlar ro'yxatini saqlaydi
   resizer.py         - istalgan rasmni belgilangan px o'lcham + dpi bilan qayta hajmga keltiradi
   video_sticker.py   - GIF/animatsiyani Telegram video-stiker (WEBM/VP9) formatiga o'giradi
+  font_store.py      - har bir foydalanuvchi yuklagan shaxsiy shriftlarni saqlaydi
   config.py          - .env / BOT_TOKEN o'qish
 bot/                 - interaktiv Telegram bot
   main.py, handlers.py, state.py
-data/                - ishga tushirilganda avtomatik yaratiladi (logotiplar, to'plamlar ro'yxati)
+data/                - ishga tushirilganda avtomatik yaratiladi (logotiplar, shriftlar, to'plamlar ro'yxati)
 scripts/
   upload_pack.py             - papkadagi rasmlarni to'plam qilib yuklash
   generate_text_stickers.py  - matndan stiker rasmlari generatsiya qilish
@@ -243,11 +251,12 @@ Procfile             - hosting xizmatlari uchun ishga tushirish buyrug'i
   qo'llab-quvvatlanmaydi. Bitta to'plamda statik va video stikerlarni
   aralashtirib bo'lmaydi (Telegram cheklovi) — yuqoridagi "To'plam
   yaratish" bo'limiga qarang.
-- Stil sozlamalari, kompaniya logotipi va "Mening to'plamlarim" ro'yxati
-  `data/` papkasida (xotirada emas, diskda) saqlanadi. **Bepul Render
-  rejasida doimiy disk yo'q** — shuning uchun bot qayta ishga tushganda
-  (redeploy yoki uzoq vaqt uxlab, qayta uyg'ongandan keyin) bu ma'lumotlar
-  o'chib ketishi mumkin va foydalanuvchilar logotipni qayta yuklashga
-  to'g'ri kelishi mumkin. To'liq doimiy saqlash kerak bo'lsa, Render'da
+- Stil sozlamalari, kompaniya logotipi, yuklangan shaxsiy shriftlar va
+  "Mening to'plamlarim" ro'yxati `data/` papkasida (xotirada emas,
+  diskda) saqlanadi. **Bepul Render rejasida doimiy disk yo'q** —
+  shuning uchun bot qayta ishga tushganda (redeploy yoki uzoq vaqt
+  uxlab, qayta uyg'ongandan keyin) bu ma'lumotlar o'chib ketishi mumkin
+  va foydalanuvchilar logotip/shriftni qayta yuklashga to'g'ri kelishi
+  mumkin. To'liq doimiy saqlash kerak bo'lsa, Render'da
   pullik "Persistent Disk" ulash yoki tashqi bazaga (masalan Postgres)
   o'tkazish kerak bo'ladi.

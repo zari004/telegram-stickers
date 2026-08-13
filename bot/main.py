@@ -54,6 +54,12 @@ def build_application() -> Application:
         MessageHandler(filters.ANIMATION | filters.Document.GIF, handlers.gif_handler)
     )
     application.add_handler(
+        MessageHandler(
+            filters.Document.FileExtension("ttf") | filters.Document.FileExtension("otf"),
+            handlers.font_upload_handler,
+        )
+    )
+    application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.text_handler)
     )
 
