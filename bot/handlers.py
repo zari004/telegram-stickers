@@ -507,7 +507,10 @@ async def font_upload_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_prefs.awaiting_custom_font = False
     user_prefs.style.font_path = str(font.path)
     await update.message.reply_text(
-        f"✅ '{font.name}' shrifti yuklandi va tanlandi.",
+        f"✅ '{font.name}' shrifti yuklandi va tanlandi.\n\n"
+        "Eslatma: agar bu shriftda ba'zi harflar (masalan Ў, Ғ, Қ, Ҳ) bo'lmasa, "
+        "o'sha harflar avtomatik standart shrift bilan chiqadi - matn hech qachon "
+        "buzilib chiqmaydi.",
         reply_markup=_style_keyboard(user_prefs.style, user.id),
     )
 
