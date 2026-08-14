@@ -78,7 +78,8 @@ def convert_to_video_sticker(source_bytes: bytes) -> bytes:
                 "-vf", scale_filter,
                 "-c:v", "libvpx-vp9",
                 "-b:v", f"{bitrate_kbps}k",
-                "-pix_fmt", "yuv420p",
+                "-pix_fmt", "yuva420p",
+                "-auto-alt-ref", "0",
                 "-an",
                 "-deadline", "good",
                 "-cpu-used", "4",
@@ -104,40 +105,26 @@ def convert_to_video_sticker(source_bytes: bytes) -> bytes:
         raise RuntimeError(f"GIFni video-stikerga o'girib bo'lmadi: {last_error}")
 
 
-def image_to_video_sticker(
-    png_bytes: bytes,
-    duration: float = 1.0,
-    background: tuple[int, int, int] = (255, 255, 255),
-) -> bytes:
+def image_to_video_sticker(png_bytes: bytes, duration: float = 1.0) -> bytes:
     """Wrap a single still PNG (e.g. a rendered text sticker) into a minimal
-    WEBM/VP9 "video" sticker.
+    WEBM/VP9 "video" sticker, keeping its transparency.
 
     Telegram sticker sets can only hold one format at a time - if a pack was
     started with a GIF (making it "video" format), a text/photo sticker has
     to become a trivial looping video too instead of being rejected outright.
 
-    VP9 alpha-channel encoding through ffmpeg proved unreliable in testing
-    (the alpha plane didn't survive the round trip), so any transparency is
-    flattened onto ``background`` first rather than risk a broken-looking
-    sticker with a solid black box where it should be see-through.
+    VP9 alpha via ffmpeg (``-pix_fmt yuva420p -auto-alt-ref 0``) does survive
+    the round trip - an earlier check here got fooled by ffmpeg's default
+    "vp9" decoder, which silently drops the alpha plane; explicitly decoding
+    with "-c:v libvpx-vp9" (as done in ``extract_first_frame`` too) preserves
+    it. So the source's real transparency is kept instead of being flattened
+    onto a solid color.
     """
-    from io import BytesIO
-
-    from PIL import Image
-
-    with Image.open(BytesIO(png_bytes)) as source:
-        source = source.convert("RGBA")
-        flattened = Image.new("RGB", source.size, background)
-        flattened.paste(source, mask=source.split()[-1])
-        buf = BytesIO()
-        flattened.save(buf, format="PNG")
-        flat_png_bytes = buf.getvalue()
-
     ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         src_path = Path(tmpdir) / "frame.png"
-        src_path.write_bytes(flat_png_bytes)
+        src_path.write_bytes(png_bytes)
         out_path = Path(tmpdir) / "out.webm"
 
         scale_filter = f"scale='if(gt(iw,ih),{STICKER_SIZE},-2)':'if(gt(iw,ih),-2,{STICKER_SIZE})'"
@@ -152,7 +139,8 @@ def image_to_video_sticker(
                 "-vf", f"{scale_filter},fps=30",
                 "-c:v", "libvpx-vp9",
                 "-b:v", f"{bitrate_kbps}k",
-                "-pix_fmt", "yuv420p",
+                "-pix_fmt", "yuva420p",
+                "-auto-alt-ref", "0",
                 "-an",
                 "-deadline", "good",
                 "-cpu-used", "4",
