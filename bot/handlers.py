@@ -1054,10 +1054,7 @@ async def _handle_incoming_image(update: Update, context: ContextTypes.DEFAULT_T
             # stickers - turn this static image into a trivial looping clip
             # instead of rejecting it outright.
             status_message = await update.message.reply_text(
-                "\U0001F504 Video-formatdagi to'plamga moslashtirilyapti... "
-                "(bu to'plam GIF bilan boshlangani uchun rasm ham kichik videoga aylanadi - "
-                "shaffof fon oq rangga almashadi, chunki Telegram video-stikerlarda "
-                "shaffoflikni to'liq ko'rsatmaydi)"
+                "\U0001F504 Video-formatdagi to'plamga moslashtirilyapti..."
             )
             media_bytes = await asyncio.to_thread(image_to_video_sticker, png_bytes)
             sticker_format = "video"
@@ -1332,10 +1329,7 @@ async def _add_text_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             # stickers - turn this text sticker into a trivial looping clip
             # instead of rejecting it outright.
             status_message = await update.message.reply_text(
-                "\U0001F504 Video-formatdagi to'plamga moslashtirilyapti... "
-                "(bu to'plam GIF bilan boshlangani uchun rasm ham kichik videoga aylanadi - "
-                "shaffof fon oq rangga almashadi, chunki Telegram video-stikerlarda "
-                "shaffoflikni to'liq ko'rsatmaydi)"
+                "\U0001F504 Video-formatdagi to'plamga moslashtirilyapti..."
             )
             media_bytes = await asyncio.to_thread(image_to_video_sticker, png_bytes)
             sticker_format = "video"
