@@ -51,9 +51,31 @@ def extract_first_frame(source_bytes: bytes) -> bytes:
         return out_path.read_bytes()
 
 
-def convert_to_video_sticker(source_bytes: bytes) -> bytes:
+def _flatten_frame(png_path: Path, background: tuple[int, int, int]) -> None:
+    from PIL import Image
+
+    with Image.open(png_path) as frame:
+        frame = frame.convert("RGBA")
+        flattened = Image.new("RGB", frame.size, background)
+        flattened.paste(frame, mask=frame.split()[-1])
+        flattened.save(png_path)
+
+
+def convert_to_video_sticker(
+    source_bytes: bytes, background: tuple[int, int, int] = (255, 255, 255)
+) -> bytes:
     """Convert GIF/MP4 animation bytes into WEBM/VP9 sticker bytes that fit
     Telegram's video-sticker limits.
+
+    Any transparency in the source is flattened onto ``background`` first.
+    WebM/VP9 alpha (``-pix_fmt yuva420p``) does encode and decode correctly
+    through ffmpeg itself - verified directly by re-decoding a converted
+    file with ffmpeg's libvpx-vp9 decoder - but Telegram's own video-sticker
+    renderer doesn't honor it in practice: a real device showed a solid
+    black box where the transparent background should have been, instead
+    of seeing through. So instead of relying on that, each frame is
+    composited onto an opaque background before encoding, the same way
+    ``image_to_video_sticker`` handles a single still image.
 
     Raises RuntimeError if ffmpeg fails, or if the file can't be shrunk
     under the size limit even at the lowest attempted bitrate.
@@ -63,23 +85,43 @@ def convert_to_video_sticker(source_bytes: bytes) -> bytes:
     with tempfile.TemporaryDirectory() as tmpdir:
         src_path = Path(tmpdir) / "source"
         src_path.write_bytes(source_bytes)
-        out_path = Path(tmpdir) / "out.webm"
+        frames_dir = Path(tmpdir) / "frames"
+        frames_dir.mkdir()
 
         scale_filter = (
             f"scale='if(gt(iw,ih),{STICKER_SIZE},-2)':'if(gt(iw,ih),-2,{STICKER_SIZE})',fps=30"
         )
+        extract_cmd = [
+            ffmpeg_exe, "-y",
+            "-i", str(src_path),
+            "-t", str(MAX_DURATION_SECONDS),
+            "-vf", scale_filter,
+            "-pix_fmt", "rgba",
+            str(frames_dir / "frame_%04d.png"),
+        ]
+        try:
+            result = subprocess.run(extract_cmd, capture_output=True, timeout=FFMPEG_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("vaqt tugadi (ffmpeg juda uzoq ishladi)") from None
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.decode(errors="ignore")[-500:])
 
+        frame_paths = sorted(frames_dir.glob("frame_*.png"))
+        if not frame_paths:
+            raise RuntimeError("GIFdan birorta ham kadr chiqmadi")
+        for frame_path in frame_paths:
+            _flatten_frame(frame_path, background)
+
+        out_path = Path(tmpdir) / "out.webm"
         last_error = "noma'lum xatolik"
         for bitrate_kbps in BITRATE_ATTEMPTS_KBPS:
             cmd = [
                 ffmpeg_exe, "-y",
-                "-i", str(src_path),
-                "-t", str(MAX_DURATION_SECONDS),
-                "-vf", scale_filter,
+                "-framerate", "30",
+                "-i", str(frames_dir / "frame_%04d.png"),
                 "-c:v", "libvpx-vp9",
                 "-b:v", f"{bitrate_kbps}k",
-                "-pix_fmt", "yuva420p",
-                "-auto-alt-ref", "0",
+                "-pix_fmt", "yuv420p",
                 "-an",
                 "-deadline", "good",
                 "-cpu-used", "4",
@@ -105,26 +147,31 @@ def convert_to_video_sticker(source_bytes: bytes) -> bytes:
         raise RuntimeError(f"GIFni video-stikerga o'girib bo'lmadi: {last_error}")
 
 
-def image_to_video_sticker(png_bytes: bytes, duration: float = 1.0) -> bytes:
+def image_to_video_sticker(
+    png_bytes: bytes,
+    duration: float = 1.0,
+    background: tuple[int, int, int] = (255, 255, 255),
+) -> bytes:
     """Wrap a single still PNG (e.g. a rendered text sticker) into a minimal
-    WEBM/VP9 "video" sticker, keeping its transparency.
+    WEBM/VP9 "video" sticker.
 
     Telegram sticker sets can only hold one format at a time - if a pack was
     started with a GIF (making it "video" format), a text/photo sticker has
     to become a trivial looping video too instead of being rejected outright.
 
-    VP9 alpha via ffmpeg (``-pix_fmt yuva420p -auto-alt-ref 0``) does survive
-    the round trip - an earlier check here got fooled by ffmpeg's default
-    "vp9" decoder, which silently drops the alpha plane; explicitly decoding
-    with "-c:v libvpx-vp9" (as done in ``extract_first_frame`` too) preserves
-    it. So the source's real transparency is kept instead of being flattened
-    onto a solid color.
+    Any transparency is flattened onto ``background`` first rather than kept
+    as real WebM/VP9 alpha: ffmpeg itself encodes and decodes that alpha
+    correctly (verified directly with its libvpx-vp9 decoder), but Telegram's
+    own video-sticker renderer doesn't honor it on a real device - it shows
+    a solid black box instead of seeing through - so flattening is the only
+    approach that reliably looks right for users.
     """
-    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-
     with tempfile.TemporaryDirectory() as tmpdir:
-        src_path = Path(tmpdir) / "frame.png"
-        src_path.write_bytes(png_bytes)
+        frame_path = Path(tmpdir) / "frame.png"
+        frame_path.write_bytes(png_bytes)
+        _flatten_frame(frame_path, background)
+
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
         out_path = Path(tmpdir) / "out.webm"
 
         scale_filter = f"scale='if(gt(iw,ih),{STICKER_SIZE},-2)':'if(gt(iw,ih),-2,{STICKER_SIZE})'"
@@ -134,13 +181,12 @@ def image_to_video_sticker(png_bytes: bytes, duration: float = 1.0) -> bytes:
             cmd = [
                 ffmpeg_exe, "-y",
                 "-loop", "1",
-                "-i", str(src_path),
+                "-i", str(frame_path),
                 "-t", str(duration),
                 "-vf", f"{scale_filter},fps=30",
                 "-c:v", "libvpx-vp9",
                 "-b:v", f"{bitrate_kbps}k",
-                "-pix_fmt", "yuva420p",
-                "-auto-alt-ref", "0",
+                "-pix_fmt", "yuv420p",
                 "-an",
                 "-deadline", "good",
                 "-cpu-used", "4",
