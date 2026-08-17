@@ -102,6 +102,8 @@ shuning uchun bot buni o'zi eslab qoladi — quyidagi "Eslatmalar" bo'limiga
 qarang; ro'yxatda har bir to'plam formati 🖼 rasm/matn yoki 🎬 video/GIF
 belgisi bilan ko'rsatiladi). Har bir to'plamni tanlab:
 - ➕ davom qo'shish (yopilgan to'plamga yana stiker qo'shish)
+- 🗑 bitta stikerni o'chirish (to'plamdagi stikerlar rasm sifatida ko'rsatiladi,
+  har birining tagida "o'chirish" tugmasi bilan — qolganlari o'z joyida qoladi)
 - ✏️ nomini o'zgartirish
 - 🗑 butunlay o'chirish (Telegram'dagi to'plamning o'zi ham o'chadi)
 
