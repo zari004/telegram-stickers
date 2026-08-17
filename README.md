@@ -263,4 +263,10 @@ Procfile             - hosting xizmatlari uchun ishga tushirish buyrug'i
   va foydalanuvchilar logotip/shriftni qayta yuklashga to'g'ri kelishi
   mumkin. To'liq doimiy saqlash kerak bo'lsa, Render'da
   pullik "Persistent Disk" ulash yoki tashqi bazaga (masalan Postgres)
-  o'tkazish kerak bo'ladi.
+  o'tkazish kerak bo'ladi. "Mening to'plamlarim" ro'yxati shu tarzda
+  yo'qolib qolsa ham, to'plamning o'zi Telegram serverida butun saqlanadi —
+  faqat bot uning nomini "unutgan" bo'ladi; `/mypacks` dagi "\U0001F517
+  Yo'qolgan to'plamni tiklash" tugmasi orqali to'plamning
+  `t.me/addstickers/...` havolasini yuborib, uni ro'yxatga qaytarish
+  mumkin (nomida foydalanuvchining o'z ID'i borligi tekshiriladi, shuning
+  uchun boshqa birovning to'plamini bunday tiklab bo'lmaydi).

@@ -54,6 +54,7 @@ class UserPrefs:
     awaiting_custom_color: str | None = None  # "bg" or "text"
     awaiting_resize_field: str | None = None  # "width", "height" or "dpi"
     awaiting_custom_font: bool = False
+    awaiting_pack_relink: bool = False
 
 
 class PrefsStore:

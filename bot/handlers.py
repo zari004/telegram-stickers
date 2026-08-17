@@ -243,6 +243,13 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     elif action == "help":
         prefs.get(user.id).resize_mode = False
         await _safe_edit_message_text(query, WELCOME_TEXT, reply_markup=_main_menu_keyboard())
+    elif action == "relink":
+        prefs.get(user.id).awaiting_pack_relink = True
+        await _safe_edit_message_text(query,
+            "\U0001F517 To'plamning havolasini yuboring "
+            "(masalan: https://t.me/addstickers/mening_toplamim_123456789_by_botusername) - "
+            "shu bot orqali yaratilgan to'plam bo'lsa, uni ro'yxatga qaytaraman."
+        )
 
 
 # --------------------------------------------------------------------------
@@ -743,6 +750,7 @@ def _packs_keyboard(packs: list[pack_registry.PackRecord]) -> InlineKeyboardMark
         ]
         for i, record in enumerate(packs)
     ]
+    rows.append([InlineKeyboardButton("\U0001F517 Yo'qolgan to'plamni tiklash", callback_data="menu:relink")])
     rows.append([InlineKeyboardButton("\U0001F3E0 Bosh menyu", callback_data="menu:help")])
     return InlineKeyboardMarkup(rows)
 
@@ -766,8 +774,16 @@ async def _render_mypacks(user_id: int, send) -> None:
     packs = pack_registry.list_packs(user_id)
     if not packs:
         await send(
-            "Sizda hali stiker to'plamlaringiz yo'q. /newpack orqali birinchisini yarating.",
-            reply_markup=_back_to_menu_button(),
+            "Sizda hali stiker to'plamlaringiz yo'q. /newpack orqali birinchisini yarating.\n\n"
+            "Avval yaratgan to'plamingiz shu yerda ko'rinmayaptimi? Bot vaqti-vaqti bilan "
+            "yangilanganda bu ro'yxat tozalanishi mumkin, lekin to'plamning o'zi Telegram'da "
+            "butun saqlanadi - pastdagi tugma bilan uni qayta tiklang.",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("\U0001F517 Yo'qolgan to'plamni tiklash", callback_data="menu:relink")],
+                    [InlineKeyboardButton("\U0001F3E0 Bosh menyu", callback_data="menu:help")],
+                ]
+            ),
         )
         return
     await send("\U0001F4E6 Sizning stiker to'plamlaringiz:", reply_markup=_packs_keyboard(packs))
@@ -775,6 +791,56 @@ async def _render_mypacks(user_id: int, send) -> None:
 
 async def mypacks_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _render_mypacks(update.effective_user.id, update.message.reply_text)
+
+
+def _extract_set_name(raw: str) -> str:
+    raw = raw.strip()
+    match = re.search(r"(?:t\.me/addstickers/)([A-Za-z0-9_]+)", raw)
+    return match.group(1) if match else raw
+
+
+async def _relink_pack(update: Update, context: ContextTypes.DEFAULT_TYPE, raw_link: str) -> None:
+    """Re-register a pack this bot created but whose local record was lost.
+
+    ``pack_registry`` is the only place the bot remembers which packs belong
+    to which user (Telegram's Bot API has no "list my sets" endpoint), and
+    on hosts without a persistent disk that file gets wiped on every
+    redeploy - the sticker sets themselves are untouched on Telegram's side,
+    only the bot's local memory of them. ``build_set_name`` always embeds
+    the creating user's id in the set name itself, so checking for that
+    substring is enough to confirm this user actually owns the pack without
+    needing any extra Telegram API support.
+    """
+    user = update.effective_user
+    set_name = _extract_set_name(raw_link)
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", set_name):
+        await update.message.reply_text(
+            "Bu havola yoki nom to'g'ri ko'rinmayapti. To'plamning t.me/addstickers/... "
+            "havolasini to'liq yuboring."
+        )
+        return
+    if f"_{user.id}_by_" not in set_name:
+        await update.message.reply_text(
+            "Bu to'plam sizga tegishli emasga o'xshaydi (nomida sizning ID'ingiz yo'q), "
+            "shuning uchun uni ro'yxatingizga qo'sha olmayman."
+        )
+        return
+
+    try:
+        sticker_set = await context.bot.get_sticker_set(set_name)
+    except (BadRequest, TelegramError) as exc:
+        await update.message.reply_text(f"Topilmadi: {exc.message}")
+        return
+
+    sticker_format = "video" if sticker_set.stickers and sticker_set.stickers[0].is_video else "static"
+    pack_registry.upsert_pack(
+        user.id, set_name, sticker_set.title, len(sticker_set.stickers), sticker_format=sticker_format
+    )
+    await update.message.reply_text(
+        f"✅ '{sticker_set.title}' to'plami ro'yxatga qaytarildi ({len(sticker_set.stickers)} ta stiker).\n"
+        f"{pack_link(set_name)}",
+        reply_markup=_back_to_menu_button(),
+    )
 
 
 async def pack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1209,6 +1275,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if active and active.set_name == set_name:
             active.title = new_title
         await update.message.reply_text(f"✅ Nomi '{new_title}' ga o'zgartirildi.")
+        return
+
+    if user_prefs.awaiting_pack_relink:
+        user_prefs.awaiting_pack_relink = False
+        await _relink_pack(update, context, text)
         return
 
     if user_prefs.resize_mode:
