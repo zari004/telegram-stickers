@@ -747,12 +747,16 @@ def _packs_keyboard(packs: list[pack_registry.PackRecord]) -> InlineKeyboardMark
     return InlineKeyboardMarkup(rows)
 
 
+DELETE_ITEM_PAGE_SIZE = 8
+
+
 def _pack_menu_keyboard(idx: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("➕ Davom qo'shish", callback_data=f"pack:continue:{idx}")],
+            [InlineKeyboardButton("\U0001F5D1 Bitta stikerni o'chirish", callback_data=f"pack:delitem:{idx}:0")],
             [InlineKeyboardButton("✏️ Nomini o'zgartirish", callback_data=f"pack:rename:{idx}")],
-            [InlineKeyboardButton("\U0001F5D1 O'chirish", callback_data=f"pack:delete:{idx}")],
+            [InlineKeyboardButton("\U0001F5D1 Butun to'plamni o'chirish", callback_data=f"pack:delete:{idx}")],
             [InlineKeyboardButton("\U0001F519 Ro'yxatga qaytish", callback_data="pack:back")],
         ]
     )
@@ -842,6 +846,80 @@ async def pack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await _safe_edit_message_text(query,
             f"\U0001F5D1 '{record.title}' o'chirildi.", reply_markup=_back_to_menu_button()
         )
+    elif action == "delitem":
+        page = int(parts[3]) if len(parts) > 3 else 0
+        await query.answer()
+        try:
+            sticker_set = await context.bot.get_sticker_set(record.name)
+        except (BadRequest, TelegramError) as exc:
+            await _safe_edit_message_text(query, f"Xatolik: {exc.message}", reply_markup=_pack_menu_keyboard(idx))
+            return
+
+        stickers = sticker_set.stickers
+        if not stickers:
+            await _safe_edit_message_text(query,
+                "Bu to'plamda stiker yo'q.", reply_markup=_pack_menu_keyboard(idx)
+            )
+            return
+
+        start = page * DELETE_ITEM_PAGE_SIZE
+        if start >= len(stickers):
+            start, page = 0, 0
+        page_stickers = stickers[start:start + DELETE_ITEM_PAGE_SIZE]
+
+        await _safe_edit_message_text(query,
+            f"\U0001F5D1 O'chirmoqchi bo'lgan stikerni tanlang "
+            f"({start + 1}-{start + len(page_stickers)} / {len(stickers)}):"
+        )
+        chat_id = query.message.chat_id
+        for offset, sticker in enumerate(page_stickers):
+            pos = start + offset
+            await context.bot.send_sticker(
+                chat_id=chat_id,
+                sticker=sticker.file_id,
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton(
+                        f"\U0001F5D1 #{pos + 1} ni o'chirish", callback_data=f"pack:delsticker:{idx}:{pos}"
+                    )]]
+                ),
+            )
+
+        nav_row = []
+        if start > 0:
+            nav_row.append(InlineKeyboardButton("⬅️ Oldingi", callback_data=f"pack:delitem:{idx}:{page - 1}"))
+        if start + DELETE_ITEM_PAGE_SIZE < len(stickers):
+            nav_row.append(InlineKeyboardButton("Keyingi ➡️", callback_data=f"pack:delitem:{idx}:{page + 1}"))
+        nav_rows = [nav_row] if nav_row else []
+        nav_rows.append([InlineKeyboardButton("\U0001F519 Orqaga", callback_data=f"pack:open:{idx}")])
+        await context.bot.send_message(chat_id=chat_id, text="Boshqa amallar:", reply_markup=InlineKeyboardMarkup(nav_rows))
+    elif action == "delsticker":
+        pos = int(parts[3])
+        try:
+            sticker_set = await context.bot.get_sticker_set(record.name)
+        except (BadRequest, TelegramError) as exc:
+            await query.answer(f"Xatolik: {exc.message}", show_alert=True)
+            return
+        if pos >= len(sticker_set.stickers):
+            await query.answer("Bu stiker allaqachon o'chirilgan.", show_alert=True)
+            return
+
+        try:
+            await context.bot.delete_sticker_from_set(sticker_set.stickers[pos].file_id)
+        except (BadRequest, TelegramError) as exc:
+            await query.answer(f"Xatolik: {exc.message}", show_alert=True)
+            return
+
+        new_count = len(sticker_set.stickers) - 1
+        pack_registry.upsert_pack(user.id, record.name, record.title, new_count, sticker_format=record.sticker_format)
+        active = sessions.get(user.id)
+        if active and active.set_name == record.name:
+            active.count = new_count
+
+        await query.answer("✅ O'chirildi")
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except BadRequest:
+            pass
 
 
 # --------------------------------------------------------------------------
