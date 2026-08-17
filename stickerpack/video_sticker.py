@@ -68,14 +68,13 @@ def convert_to_video_sticker(
     Telegram's video-sticker limits.
 
     Any transparency in the source is flattened onto ``background`` first.
-    WebM/VP9 alpha (``-pix_fmt yuva420p``) does encode and decode correctly
-    through ffmpeg itself - verified directly by re-decoding a converted
-    file with ffmpeg's libvpx-vp9 decoder - but Telegram's own video-sticker
-    renderer doesn't honor it in practice: a real device showed a solid
-    black box where the transparent background should have been, instead
-    of seeing through. So instead of relying on that, each frame is
-    composited onto an opaque background before encoding, the same way
-    ``image_to_video_sticker`` handles a single still image.
+    A genuinely multi-frame animation encoded with WebM/VP9 alpha
+    (``-pix_fmt yuva420p``) showed a solid black box instead of a
+    transparent background on a real device, even though the same alpha
+    approach works fine for a single repeated frame (see
+    ``image_to_video_sticker``) - something about the multi-frame case
+    specifically breaks it in practice, so each frame is composited onto
+    an opaque background before encoding instead of trying to rely on it.
 
     Raises RuntimeError if ffmpeg fails, or if the file can't be shrunk
     under the size limit even at the lowest attempted bitrate.
@@ -147,31 +146,28 @@ def convert_to_video_sticker(
         raise RuntimeError(f"GIFni video-stikerga o'girib bo'lmadi: {last_error}")
 
 
-def image_to_video_sticker(
-    png_bytes: bytes,
-    duration: float = 1.0,
-    background: tuple[int, int, int] = (255, 255, 255),
-) -> bytes:
+def image_to_video_sticker(png_bytes: bytes, duration: float = 1.0) -> bytes:
     """Wrap a single still PNG (e.g. a rendered text sticker) into a minimal
-    WEBM/VP9 "video" sticker.
+    WEBM/VP9 "video" sticker, keeping its transparency.
 
     Telegram sticker sets can only hold one format at a time - if a pack was
     started with a GIF (making it "video" format), a text/photo sticker has
     to become a trivial looping video too instead of being rejected outright.
 
-    Any transparency is flattened onto ``background`` first rather than kept
-    as real WebM/VP9 alpha: ffmpeg itself encodes and decodes that alpha
-    correctly (verified directly with its libvpx-vp9 decoder), but Telegram's
-    own video-sticker renderer doesn't honor it on a real device - it shows
-    a solid black box instead of seeing through - so flattening is the only
-    approach that reliably looks right for users.
+    Unlike ``convert_to_video_sticker``, this keeps real WebM/VP9 alpha
+    (``-pix_fmt yuva420p -auto-alt-ref 0``) instead of flattening onto a
+    solid background - confirmed working correctly in the actual Telegram
+    app (a user's PNG stickers added to a GIF-started pack showed proper
+    transparency, not a black box). The black-background bug that made
+    ``convert_to_video_sticker`` flatten instead is specific to converting
+    a genuinely multi-frame animation - this single-repeated-frame case
+    doesn't hit it.
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        frame_path = Path(tmpdir) / "frame.png"
-        frame_path.write_bytes(png_bytes)
-        _flatten_frame(frame_path, background)
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
 
-        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_path = Path(tmpdir) / "frame.png"
+        src_path.write_bytes(png_bytes)
         out_path = Path(tmpdir) / "out.webm"
 
         scale_filter = f"scale='if(gt(iw,ih),{STICKER_SIZE},-2)':'if(gt(iw,ih),-2,{STICKER_SIZE})'"
@@ -181,12 +177,13 @@ def image_to_video_sticker(
             cmd = [
                 ffmpeg_exe, "-y",
                 "-loop", "1",
-                "-i", str(frame_path),
+                "-i", str(src_path),
                 "-t", str(duration),
                 "-vf", f"{scale_filter},fps=30",
                 "-c:v", "libvpx-vp9",
                 "-b:v", f"{bitrate_kbps}k",
-                "-pix_fmt", "yuv420p",
+                "-pix_fmt", "yuva420p",
+                "-auto-alt-ref", "0",
                 "-an",
                 "-deadline", "good",
                 "-cpu-used", "4",

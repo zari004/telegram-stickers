@@ -61,16 +61,15 @@ shart emas.
   aralashtirib yuborish mumkin — Telegram bitta to'plamda ikkala formatni
   birga saqlamaydi, shuning uchun kerak bo'lganda bot buni fonda avtomatik
   moslashtiradi: agar to'plam GIF bilan boshlangan bo'lsa, keyin yuborgan
-  matn/rasm ham qisqa video-stikerga aylantiriladi (bunda **shaffof fon oq
-  rangga almashadi** — Telegram video-stikerlarda haqiqiy shaffoflikni
-  to'liq ko'rsatmaydi, shuning uchun rasmning shaffof qismlari oq fon bilan
-  "tekislanadi"); agar to'plam matn/rasm bilan boshlangan bo'lsa, keyin
-  yuborgan GIFning birinchi kadri statik rasm sifatida qo'shiladi. Agar
-  PNG rasmlaringizning shaffof foni albatta saqlanishi kerak bo'lsa, o'sha
-  to'plamga GIF qo'shmang — faqat rasm/matndan iborat (statik) to'plamda
-  shaffoflik to'liq saqlanadi. Bepul Render instansida video konvertatsiya
-  protsessor kuchi cheklangani sabab bir necha o'n soniya davom etishi
-  mumkin — shoshilmang, "GIF video-stikerga o'girilmoqda..." xabari
+  matn/rasm ham qisqa video-stikerga aylantiriladi (shaffof fon saqlanadi);
+  agar to'plam matn/rasm bilan boshlangan bo'lsa, keyin yuborgan GIFning
+  birinchi kadri statik rasm sifatida qo'shiladi. **Eslatma**: haqiqiy
+  animatsion (bir necha kadrli) GIFlarda shaffof fon, texnik sabablarga
+  ko'ra, video-stikerga o'girilganda oq rangga almashadi — faqat bitta
+  rasm/matndan yasalgan video-stikerlarda shaffoflik to'liq saqlanadi.
+  Bepul Render instansida video konvertatsiya protsessor kuchi cheklangani
+  sabab bir necha o'n soniya davom etishi mumkin — shoshilmang, "GIF
+  video-stikerga o'girilmoqda..." xabari
   chiqqach kuting.
 - `/done` — to'plamni yakunlaydi va `t.me/addstickers/...` havolasini beradi
 - `/cancel` — joriy to'plam yaratishni bekor qiladi
